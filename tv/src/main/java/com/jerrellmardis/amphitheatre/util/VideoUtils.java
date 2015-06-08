@@ -17,19 +17,29 @@
 package com.jerrellmardis.amphitheatre.util;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
+import android.widget.Toast;
 
+import com.github.mjdev.libaums.fs.UsbFile;
+import com.jerrellmardis.amphitheatre.model.FileSource;
 import com.jerrellmardis.amphitheatre.model.Video;
 import com.jerrellmardis.amphitheatre.server.Streamer;
 import com.orm.query.Condition;
 import com.orm.query.Select;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.net.MalformedURLException;
+import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,6 +61,7 @@ public class VideoUtils {
     private static final char EXTENSION_SEPARATOR = '.';
     private static final char UNIX_SEPARATOR = '/';
     private static final char WINDOWS_SEPARATOR = '\\';
+    private static final String TAG = "amp:VideoUtils";
 
     public static void playVideo(WeakReference<Activity> ref, final Video video) {
         final Activity activity = ref.get();
@@ -61,6 +72,7 @@ public class VideoUtils {
                 @Override
                 public void onStream(int percentStreamed) {
                     // FIXME Ideally, the watch status should only get set once the server has streamed a certain % of the video.
+                    //(a 120min video w/ 5 min credits is 115/120 ~96%
                     // Unfortunately a partial stream is only set when a user has requested to play a partially watched video.
                 }
 
@@ -83,35 +95,70 @@ public class VideoUtils {
                 }
             });
 
-            new Thread() {
-                public void run() {
-                    try {
-                        SecurePreferences preferences = new SecurePreferences(activity.getApplicationContext());
+            if(video.getSource() == FileSource.SMB) {
+                Log.d("amp:VideoUtils", "Looking to play non-local video "+video.getName()+", "+video.getVideoUrl());
+                new Thread() {
+                    public void run() {
+                        try {
+                            SecurePreferences preferences = new SecurePreferences(activity.getApplicationContext());
 
-                        String user = preferences.getString(Constants.PREFS_USER_KEY, "");
-                        String pass = preferences.getString(Constants.PREFS_PASSWORD_KEY, "");
-                        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication("", user, pass);
-                        SmbFile file = new SmbFile(video.getVideoUrl(), auth);
-                        streamer.setStreamSrc(file, null);
+                            String user = preferences.getString(Constants.PREFS_USER_KEY, "");
+                            String pass = preferences.getString(Constants.PREFS_PASSWORD_KEY, "");
+                            NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication("", user, pass);
+                            SmbFile file = new SmbFile(video.getVideoUrl(), auth);
+                            streamer.setStreamSrc(file, null);
 
-                        activity.runOnUiThread(new Runnable() {
-                            public void run() {
-                                try {
-                                    Uri uri = Uri.parse(Streamer.URL + Uri.fromFile(new File(Uri.parse(video.getVideoUrl()).getPath())).getEncodedPath());
-                                    Intent i = new Intent(Intent.ACTION_VIEW);
-                                    i.setDataAndType(uri, VideoUtils.getMimeType(video.getVideoUrl(), true));
-                                    activity.startActivity(i);
-                                } catch (ActivityNotFoundException e) {
-                                    e.printStackTrace();
+                            activity.runOnUiThread(new Runnable() {
+                                public void run() {
+                                    try {
+                                        Uri uri = Uri.parse(Streamer.URL + Uri.fromFile(new File(Uri.parse(video.getVideoUrl()).getPath())).getEncodedPath());
+                                        Intent i = new Intent(Intent.ACTION_VIEW);
+                                        i.setDataAndType(uri, VideoUtils.getMimeType(video.getVideoUrl(), true));
+                                        activity.startActivity(i);
+                                    } catch (ActivityNotFoundException e) {
+                                        e.printStackTrace();
+                                    }
                                 }
-                            }
-                        });
-                    } catch (MalformedURLException e) {
+                            });
+                        } catch (MalformedURLException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }.start();
+            } else if(video.getSource() == FileSource.INTERNAL_STORAGE) {
+                Log.d(TAG, "Playing local video " +video.getName()+" @ "+video.getVideoUrl());
+//                File myVideo = new File(video.getVideoUrl());
+//                Log.d(TAG, "File "+Uri.fromFile(myVideo));
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(Uri.parse(video.getVideoUrl()), VideoUtils.getMimeType(video.getVideoUrl(), true));
+                activity.startActivity(i);
+            } else if(video.getSource() == FileSource.USB) {
+                CopyTaskParam param = new CopyTaskParam();
+                Log.d(TAG, "Start copy task for "+video.getName()+" @ " +video.getVideoUrl());
+                try {
+                    param.from = (UsbFile) video.getFile(activity).getFile();
+                    File f = new File(Environment.getExternalStorageDirectory().getAbsolutePath()
+                            + "/usbfileman/cache");
+                    f.mkdirs();
+                    int index = param.from.getName().lastIndexOf(".");
+                    String prefix = param.from.getName().substring(0, index);
+                    String ext = param.from.getName().substring(index);
+                    // prefix must be at least 3 characters
+                    if(prefix.length() < 3) {
+                        prefix += "pad";
+                    }
+                    try {
+                        param.to = File.createTempFile(prefix, ext, f);
+                        new CopyTask(activity).execute(param);
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-            }.start();
+            }
         }
+
     }
 
     public static boolean isVideoFile(String s) {
@@ -268,5 +315,93 @@ public class VideoUtils {
         }
 
         return results;
+    }
+
+    /**
+     * Class to hold the files for a copy task. Holds the source and the
+     * destination file.
+     *
+     * @author mjahnen
+     *
+     */
+    private static class CopyTaskParam {
+        /* package */UsbFile from;
+        /* package */File to;
+    }
+    /**
+     * Asynchronous task to copy a file from the mass storage device connected
+     * via USB to the internal storage.
+     *
+     * @author mjahnen
+     *
+     */
+    private static class CopyTask extends AsyncTask<CopyTaskParam, Integer, Void> {
+
+        private ProgressDialog dialog;
+        private CopyTaskParam param;
+        private Activity mActivity;
+
+        public CopyTask(Activity activity) {
+            mActivity = activity;
+            dialog = new ProgressDialog(mActivity);
+            dialog.setTitle("Copying File");
+            dialog.setMessage("Copying a file to the internal storage, this can take some time! The file can only be played on internal storage!");
+            dialog.setIndeterminate(false);
+            dialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        }
+
+        @Override
+        protected void onPreExecute() {
+            dialog.show();
+        }
+
+        @Override
+        protected Void doInBackground(CopyTaskParam... params) {
+            long time = System.currentTimeMillis();
+            ByteBuffer buffer = ByteBuffer.allocate(4096);
+            param = params[0];
+            long length = params[0].from.getLength();
+            try {
+                FileOutputStream out = new FileOutputStream(params[0].to);
+                for (long i = 0; i < length; i += buffer.limit()) {
+                    buffer.limit((int) Math.min(buffer.capacity(), length - i));
+                    params[0].from.read(i, buffer);
+                    out.write(buffer.array(), 0, buffer.limit());
+                    publishProgress((int) i);
+                    buffer.clear();
+                }
+                out.close();
+            } catch (IOException e) {
+                Log.e(TAG, "error copying!", e);
+            }
+            Log.d(TAG, "copy time: " + (System.currentTimeMillis() - time));
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void result) {
+            dialog.dismiss();
+
+            Intent myIntent = new Intent(android.content.Intent.ACTION_VIEW);
+            File file = new File(param.to.getAbsolutePath());
+            String extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(Uri
+                    .fromFile(file).toString());
+            String mimetype = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                    extension);
+            myIntent.setDataAndType(Uri.fromFile(file), mimetype);
+            try {
+                mActivity.startActivity(myIntent);
+            } catch (ActivityNotFoundException e) {
+                Toast.makeText(mActivity, "Could no find an app for that file!",
+                        Toast.LENGTH_LONG).show();
+            }
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            dialog.setMax((int) param.from.getLength());
+            dialog.setProgress(values[0]);
+        }
+
     }
 }

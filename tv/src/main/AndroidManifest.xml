@@ -22,10 +22,15 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
 
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
     <application
         android:name="com.orm.SugarApp"
@@ -76,7 +81,16 @@
 
         <meta-data
             android:name="VERSION"
-            android:value="1"/>
+            android:value="3"/>
+        <!--
+            VERSION 4
+            - Does some regressions in the video class so that the database works correctly
+            VERSION 3
+            - Uses SuperFile class & FileSource class
+            - Video URL is now a list, so I can create a series of them and play altogether
+            VERSION 2
+            - Video supports 'isLocal' attribute
+        -->
 
         <meta-data
             android:name="QUERY_LOG"

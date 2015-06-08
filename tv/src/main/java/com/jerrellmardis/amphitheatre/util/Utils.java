@@ -34,7 +34,9 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import com.github.mjdev.libaums.fs.UsbFile;
 import com.jerrellmardis.amphitheatre.R;
+import com.jerrellmardis.amphitheatre.model.SuperFile;
 import com.jerrellmardis.amphitheatre.service.LibraryUpdateService;
 
 import org.apache.commons.lang3.StringUtils;
@@ -42,8 +44,11 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.channels.FileChannel;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * A collection of utility methods, all static.
@@ -51,7 +56,7 @@ import java.nio.channels.FileChannel;
 public final class Utils {
 
     private static final int LIBRARY_UPDATE_REQUEST_CODE = 1;
-
+    private static String TAG = "amp:Utils";
     /*
      * Making sure public utility methods remain static
      */
@@ -150,10 +155,15 @@ public final class Utils {
     }
 
     public static void scheduleLibraryUpdateService(Context context) {
+        Log.d("amp:Utils", "Checking if alarm is already set: "+isAlarmAlreadySet(context));
+        //And now
+        Log.d("amp:Utils", "Start rechecking the library");
+        Intent intent = new Intent(context, LibraryUpdateService.class);
+        /*context.startService(intent);*/
         if (isAlarmAlreadySet(context)) return;
 
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        Intent intent = new Intent(context, LibraryUpdateService.class);
+        //Intent intent = ...
         PendingIntent alarmIntent = PendingIntent.getService(context, LIBRARY_UPDATE_REQUEST_CODE,
                 intent, 0);
 
@@ -161,6 +171,7 @@ public final class Utils {
                 AlarmManager.INTERVAL_HALF_HOUR,
                 AlarmManager.INTERVAL_HALF_HOUR,
                 alarmIntent);
+
     }
 
     private static boolean isAlarmAlreadySet(Context context) {
@@ -269,5 +280,33 @@ public final class Utils {
         }
 
         editor.apply();
+    }
+
+    public static UsbFile searchUsbFiles(UsbFile root, String path) throws IOException {
+//        Log.d(TAG, "Start file search in " + new SuperFile(root).getPath() + " for " + path);
+        Log.d(TAG, "Start file search in USB for " + path);
+        if(!path.contains("usb://")) {
+            //Add the false beginning
+//            path = path.substring(6);
+            path = "usb://"+path;
+        }
+        return searchUsbFiles(Arrays.asList(root.listFiles()), path);
+    }
+    private static UsbFile searchUsbFiles(List<UsbFile> files, String path) throws IOException {
+        for(UsbFile f: files) {
+            if(new SuperFile(f).getPath().contains(path)) {
+                Log.d(TAG, "Found "+new SuperFile(f).getPath());
+                return f;
+            } else {
+                if(f.isDirectory()) {
+                    Log.d(TAG, "Folder "+new SuperFile(f).getPath()+" found, traversing");
+                    searchUsbFiles(Arrays.asList(f.listFiles()), path);
+                } else {
+                    Log.d(TAG, "Ignore "+new SuperFile(f).getPath());
+                }
+            }
+        }
+//        Log.d(TAG, "Search ended in failure");
+        return null;
     }
 }

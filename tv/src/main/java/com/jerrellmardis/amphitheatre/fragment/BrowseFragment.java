@@ -18,15 +18,26 @@ package com.jerrellmardis.amphitheatre.fragment;
 
 import android.app.Activity;
 import android.app.FragmentManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.graphics.drawable.Drawable;
+import android.hardware.usb.UsbConstants;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbInterface;
+import android.hardware.usb.UsbManager;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.preference.PreferenceManager;
+import android.provider.MediaStore;
 import android.support.v17.leanback.app.BackgroundManager;
 import android.support.v17.leanback.widget.ArrayObjectAdapter;
 import android.support.v17.leanback.widget.HeaderItem;
@@ -38,20 +49,26 @@ import android.support.v17.leanback.widget.OnItemSelectedListener;
 import android.support.v17.leanback.widget.Row;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
+import com.github.mjdev.libaums.UsbMassStorageDevice;
+import com.github.mjdev.libaums.fs.FileSystem;
+import com.github.mjdev.libaums.fs.UsbFile;
 import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.activity.DetailsActivity;
 import com.jerrellmardis.amphitheatre.activity.GridViewActivity;
 import com.jerrellmardis.amphitheatre.activity.SearchActivity;
 import com.jerrellmardis.amphitheatre.model.GridGenre;
 import com.jerrellmardis.amphitheatre.model.Source;
+import com.jerrellmardis.amphitheatre.model.SuperFile;
 import com.jerrellmardis.amphitheatre.model.Video;
 import com.jerrellmardis.amphitheatre.model.VideoGroup;
 import com.jerrellmardis.amphitheatre.service.RecommendationsService;
+import com.jerrellmardis.amphitheatre.task.DownloadTaskHelper;
 import com.jerrellmardis.amphitheatre.task.GetFilesTask;
 import com.jerrellmardis.amphitheatre.util.BlurTransform;
 import com.jerrellmardis.amphitheatre.util.Constants;
@@ -63,16 +80,23 @@ import com.jerrellmardis.amphitheatre.widget.CardPresenter;
 import com.jerrellmardis.amphitheatre.widget.GridItemPresenter;
 import com.jerrellmardis.amphitheatre.widget.SortedObjectAdapter;
 import com.jerrellmardis.amphitheatre.widget.TvShowsCardPresenter;
+import com.orm.query.Condition;
+import com.orm.query.Select;
 import com.squareup.picasso.Picasso;
 import com.squareup.picasso.RequestCreator;
 import com.squareup.picasso.Target;
 import com.squareup.picasso.Transformation;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.Timer;
@@ -82,7 +106,7 @@ import java.util.TreeSet;
 import static android.view.View.OnClickListener;
 
 public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragment
-        implements AddSourceDialogFragment.OnClickListener, CustomizeDialogFragment.OnSaveListener{
+        implements AddSourceDialogFragment.OnClickListener, CustomizeDialogFragment.OnSaveListener {
 
     private final Handler mHandler = new Handler();
 
@@ -95,6 +119,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
     private ArrayObjectAdapter mAdapter;
     private CardPresenter mCardPresenter;
     private TvShowsCardPresenter mTvShowsCardPresenter;
+    private static String TAG ="amp:BrowseFragment";
 
     private BroadcastReceiver videoUpdateReceiver = new BroadcastReceiver() {
         @Override
@@ -136,11 +161,16 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         prepareBackgroundManager();
         setupUIElements();
         setupEventListeners();
+        refreshLocalLibrary();
 
 
-        if (Video.count(Video.class, null, null) == 0) {
+        Log.d(TAG, "Activity created, force user to load "+Video.count(Video.class, null, null)+" videos");
+        if (Video.count(Video.class, null, null) == 0 && false) {
+        //Hardcoded to false b/c local is always an available source
+            Log.d(TAG, "Show add source dialog");
             showAddSourceDialog();
         } else {
+            Log.d(TAG, "Load videos");
             loadVideos();
         }
 
@@ -157,6 +187,9 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 
         // TODO video(s) may have been watched before returning back here, so we need to refresh the view.
         // This could be important if we want to display "watched" indicators on the cards.
+
+        // Refresh local library
+//        refreshLocalLibrary();
     }
 
     @Override
@@ -230,14 +263,19 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 
     private void loadVideos() {
         List<Video> videos = Source.listAll(Video.class);
+//        Clear current list and repopulate items (non-dupes)
+//        mAdapter.clear();
         if (videos != null && !videos.isEmpty()) {
             for (Video video : videos) {
+                Log.d(TAG, "Loading "+video.getName()+" from "+video.getVideoUrl());
                 addVideoToUi(video);
             }
 
             rebuildSubCategories();
 
             reloadAdapters();
+        } else {
+            Log.d(TAG, "Videos are null or empty");
         }
     }
 
@@ -318,6 +356,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
             // if not, create a new row and add it
             if (row != null) {
                 ((SortedObjectAdapter) row.getAdapter()).add(video);
+                Log.d(TAG, "Null row, adding video at index 0 to unmatched");
             } else {
                 SortedObjectAdapter listRowAdapter = new SortedObjectAdapter(
                         videoNameComparator, mCardPresenter);
@@ -325,6 +364,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 
                 HeaderItem header = new HeaderItem(0, getString(R.string.unmatched), null);
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
+                Log.d(TAG, "Adding "+video.getVideoUrl()+" at index "+index+" to Unmatched");
                 mAdapter.add(index, new ListRow(header, listRowAdapter));
             }
         } else if (video.isMovie()) {
@@ -531,7 +571,10 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         HeaderItem gridHeader = new HeaderItem(0, getString(R.string.settings), null);
         ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(new GridItemPresenter(getActivity()));
         gridRowAdapter.add(getString(R.string.add_source));
+//        gridRowAdapter.add("New LAN Source");
         gridRowAdapter.add(getString(R.string.customization));
+        //TODO If I want to make any other settings, do so here
+        //TODO Add credits section for the libaums
         mAdapter.add(new ListRow(gridHeader, gridRowAdapter));
     }
 
@@ -628,22 +671,28 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         };
     }
 
+    /**
+     * Card Click Listener
+     */
     private OnItemClickedListener getDefaultItemClickedListener() {
         return new OnItemClickedListener() {
             @Override
             public void onItemClicked(Object item, Row row) {
                 if (item instanceof Video || item instanceof VideoGroup) {
                     if (item instanceof VideoGroup) {
+                        Log.d(TAG, "Item is instance of VideoGroup");
                         Intent intent = new Intent(getActivity(), DetailsActivity.class);
                         intent.putExtra(Constants.IS_VIDEO, false);
                         intent.putExtra(Constants.VIDEO_GROUP, (VideoGroup) item);
                         startActivity(intent);
                     } else if (((Video) item).isMatched()) {
+                        Log.d(TAG, "Item is matched");
                         Intent intent = new Intent(getActivity(), DetailsActivity.class);
                         intent.putExtra(Constants.IS_VIDEO, true);
                         intent.putExtra(Constants.VIDEO, (Video) item);
                         startActivity(intent);
                     } else {
+                        Log.d(TAG, "Nothing special, play video");
                         VideoUtils.playVideo(new WeakReference<Activity>(getActivity()), (Video) item);
                     }
                 } else if (item instanceof GridGenre) {
@@ -660,12 +709,20 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                     showAddSourceDialog();
                 } else if (item instanceof String && ((String) item).contains(getString(R.string.customization))) {
                     showCustomizeDialog();
+                } else if (item instanceof String && ((String) item).contains("LAN")) {
+                    showAddLanDialog();
                 }
             }
         };
     }
 
     private void showAddSourceDialog() {
+        FragmentManager fm = getFragmentManager();
+        AddSourceDialogFragment addSourceDialog = AddSourceDialogFragment.newInstance();
+        addSourceDialog.setTargetFragment(this, 0);
+        addSourceDialog.show(fm, AddSourceDialogFragment.class.getSimpleName());
+    }
+    private void showAddLanDialog() {
         FragmentManager fm = getFragmentManager();
         AddSourceDialogFragment addSourceDialog = AddSourceDialogFragment.newInstance();
         addSourceDialog.setTargetFragment(this, 0);
@@ -684,6 +741,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         reloadAdapters();
     }
 
+
     private class UpdateBackgroundTask extends TimerTask {
         @Override
         public void run() {
@@ -699,4 +757,299 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
             });
         }
     }
+
+    public void refreshLocalLibrary() {
+        Log.d(TAG, "Try to find any local videos");
+        //Query mediastore
+        //via http://www.sandersdenardi.com/querying-and-removing-media-from-android-mediastore/
+        String[] retCol = {
+                MediaStore.Video.Media._ID,
+                MediaStore.Video.Media.TITLE,
+                MediaStore.Video.Media.MINI_THUMB_MAGIC,
+                MediaStore.Video.Media.DATE_TAKEN,
+                MediaStore.Video.Media.DATA
+
+        };
+        Cursor cur = getActivity().getContentResolver().query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                retCol,
+                null, null, null
+        );
+        Log.d(TAG, "Returns "+cur.getCount()+" result(s)");
+        //Temporarily delete ALL videos, then change for local only
+        /*List<Video> videos = Select
+                .from(Video.class)
+                .list();
+        for(Video v: videos) {
+            Log.d(TAG, "Deleting "+v.getName()+" @ "+v.getVideoUrl());
+            v.delete();
+        }*/
+        pushLocalVideos(cur);
+        //Do same for any USB drives
+        UsbManager manager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
+        HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
+        Iterator<UsbDevice> deviceIterator = deviceList.values().iterator();
+        while(deviceIterator.hasNext()){
+            UsbDevice device = deviceIterator.next();
+            Log.d(TAG, "Found "+device.getDeviceName()+" "+device.getProductName()+" "+device.getManufacturerName());            //your code
+            Log.d(TAG, "Is "+device.getDeviceClass()+", "+ device.getDeviceSubclass()+" "+ UsbConstants.USB_CLASS_MASS_STORAGE);
+            if(device.getDeviceClass() == 0 || device.getDeviceClass() == 8) {
+                PendingIntent mPermissionIntent = PendingIntent.getBroadcast(getActivity(), 0, new Intent(ACTION_USB_PERMISSION), 0);
+                IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+                getActivity().registerReceiver(mUsbReceiver, filter);
+                manager.requestPermission(device, mPermissionIntent);
+            }
+        }
+
+//        onActivityCreated(null);
+    }
+
+    /**
+     * A singular method to save videos directly using a cursor, which can be obtained through
+     * a media query like getting all the videos. Using this method, all videos in the internal
+     * storage can be obtained, plus this can be extended to get content from a USB drive
+     * @param cur Cursor containing media with certain attributes queried
+     */
+    public void pushLocalVideos(Cursor cur) {
+        if(cur.getCount() > 0) {
+            cur.moveToFirst();
+            while(!cur.isAfterLast()) {
+                int id = cur.getInt(cur.getColumnIndex(MediaStore.MediaColumns._ID));
+                Uri uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        id);
+                String filepath = cur.getString(cur.getColumnIndex(MediaStore.Video.Media.DATA));
+                File localVideo = new File(filepath);
+
+                //Let's delete this video and all like it from our video database
+                List<Video> videos = Select
+                        .from(Video.class)
+                        .where(Condition.prop("video_url").like("%" + uri.toString() + "%"))
+                        .or(Condition.prop("video_url").like("%" + filepath.substring(7) + "%")) //Remove file://
+                        .or(Condition.prop("video_url").like("%" + localVideo.getAbsolutePath() + "%"))
+                        .or(Condition.prop("video_url").like("%" + Uri.fromFile(localVideo).toString() + "%"))
+                        .list();
+                Log.d(TAG, "Purging "+videos.size()+" item(s)");
+                for(Video v: videos) {
+                    Log.d(TAG, "Deleting "+v.getVideoUrl());
+                    v.delete();
+                }
+
+                //Now returning to our original thing
+                String title = cur.getString(cur.getColumnIndex(MediaStore.MediaColumns.TITLE));
+
+//                String background = MediaStore.Video.Thumbnails.getContentUri(cur.getString(cur.getColumnIndex(MediaStore.Video.Thumbnails.FULL_SCREEN_KIND));)
+
+                long created = cur.getLong(cur.getColumnIndex(MediaStore.Video.VideoColumns.DATE_TAKEN));
+                filepath = filepath.substring(20); //Remove "/storage/emulated/0/"
+                filepath = "file://"+filepath;
+                Log.d(TAG, "Found id "+id+", "+title);
+                Log.d(TAG, "At place "+uri.getPath()+" / "+Uri.fromFile(localVideo).toString());
+//                Log.d(TAG, "Created " + created);
+
+               /* Log.d(TAG, localVideo.getAbsolutePath());
+                Log.d(TAG, localVideo.getPath());
+                try {
+                    Log.d(TAG, localVideo.getCanonicalPath());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }*/
+//                Log.d(TAG, Uri.fromFile(localVideo).toString());
+                Video localFile = new Video();
+//                localFile.setBackgroundImageUrl();
+//                localFile.setVideoUrl(uri.toString());
+//                localFile.setVideoUrl(localVideo.getAbsolutePath());
+                localFile.setVideoUrl(Uri.fromFile(localVideo).toString());
+                localFile.setName(title);
+                localFile.setCreated(created);
+                localFile.setIsMovie(true);
+                localFile.setIsMatched(false);
+                localFile.setIsLocalFile(true);
+                localFile.setOverview(filepath); //VideoColumns.Description
+                Log.d(TAG, localFile.toString());
+                localFile.save();
+                DownloadTaskHelper.updateSingleVideo(localFile, new DownloadTaskHelper.DownloadTaskListener() {
+                    @Override
+                    public void onDownloadFinished() {
+                        refresh();
+                    }
+                });
+                Log.d(TAG, "There are "+Video.count(Video.class, null, null)+" video(s)");
+                cur.moveToNext();
+            }
+            cur.close();
+            Log.d(TAG, "Updated library, now update fragment");
+        }
+    }
+
+    //For USB Access
+    private static final String ACTION_USB_PERMISSION =
+            "com.jerrellmardis.amphitheatre.USB_PERMISSION";
+    private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
+
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (ACTION_USB_PERMISSION.equals(action)) {
+                synchronized (this) {
+                    UsbDevice device = (UsbDevice)intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        if(device != null){
+                            //call method to set up device communication
+                            Log.d(TAG, "We're good to go");
+                            Log.d(TAG, "Start reading from USB");
+                            Log.d(TAG, Environment.MEDIA_MOUNTED+" "+(Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)));
+                            Log.d(TAG, device.getConfiguration(0).getInterface(0).getInterfaceClass()+"");
+                            UsbInterface usbInterface = device.getConfiguration(0).getInterface(0);
+//                            Log.d(TAG, usbInterface.getName()+"");
+//                            String extStorageDirectory  = getActivity().getExternalFilesDir(null).getAbsolutePath();
+//                            Log.d(TAG, extStorageDirectory);
+                            UsbManager manager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
+                            UsbDeviceConnection connection = manager.openDevice(device);
+//                            Log.d(TAG, connection.getSerial());
+                            //TODO Capture MediaMounted actions to get permission ahead of time and update lib for easy access
+                            // TODO universal search that refreshes library before doing stuff
+                            /*String extStore = System.getenv("EXTERNAL_STORAGE");
+                            String secStore = System.getenv("SECONDARY_STORAGE");
+                            Log.d(TAG, extStore+" "+secStore);*/
+                            /*List<StorageHelper.StorageVolume> volumes = StorageHelper.getStorages(true);
+                            for(StorageHelper.StorageVolume v: volumes) {
+                                Log.d(TAG, v.device+" "+v.fileSystem+" "+v.file.getAbsolutePath()+" "+v.getType().name());
+                            }*/
+                            UsbMassStorageDevice[] devices = UsbMassStorageDevice.getMassStorageDevices(getActivity());
+                            Log.d(TAG, "Found "+devices.length +" devices");
+                            UsbMassStorageDevice flashDrive = devices[0];
+                            try {
+                                flashDrive.init(); //We already have permission
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                Log.d(TAG, e.getMessage()+"");
+                            }
+                            Log.d(TAG, flashDrive.getPartitions().get(0).getVolumeLabel()+"");
+//                            Log.d(TAG, flashDrive.getPartitions().get(0).getFileSystem().getRootDirectory().getName()+"");
+                            Log.d(TAG, flashDrive.getPartitions().get(0).getFileSystem().getVolumeLabel() + "");
+                            // we always use the first partition of the device
+                            FileSystem fs = flashDrive.getPartitions().get(0).getFileSystem();
+                            UsbFile root = fs.getRootDirectory();
+                            List<UsbFile> files = new ArrayList<UsbFile>();
+                            try {
+                                files = Arrays.asList(root.listFiles());
+                                traverseAndFindVideos(files);
+                                /*for(UsbFile usbFile: files) {
+
+                                }*/
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            File file=new File("/");
+                            File[] listFiles = file.listFiles();
+                            for ( File f : listFiles){
+//                                Log.d(TAG, f.getAbsolutePath());
+                                /*if(!f.getAbsolutePath().contains("emulated")) {
+                                    //Read drive
+                                    File usbDrive = f;
+                                    File[] driveFiles = usbDrive.listFiles();
+                                    for(File f2: driveFiles) {
+                                        Log.d(TAG, f2.getAbsolutePath());
+                                        //Is Video?
+                                        Log.d(TAG, VideoUtils.isVideoFile(f2.getAbsolutePath())+" < is video?");
+                                        //If so, push
+                                    }
+                                }*/
+                                //you can do all file processing part here
+                                /*String[] retCol = {
+                                        MediaStore.Video.Media._ID,
+                                        MediaStore.Video.Media.TITLE,
+                                        MediaStore.Video.Media.MINI_THUMB_MAGIC,
+                                        MediaStore.Video.Media.DATE_TAKEN,
+                                        MediaStore.Video.Media.DATA
+
+                                };
+                                Cursor cur = getActivity().getContentResolver().query(
+                                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                        retCol,
+                                        null, null, null
+                                );
+                                Log.d(TAG, cur.getCount()+"");
+                                cur.close();*/
+                            }
+                        }
+                    }
+                    else {
+                        Log.d(TAG, "permission denied for device " + device);
+                    }
+                }
+            }
+        }
+    };
+    public void traverseAndFindVideos(List<UsbFile> usbFiles) throws IOException {
+        //Look for videos recursively.
+        //If directory, recall function
+        //If video, save (and download metadata)
+        //Else do nothing
+        for(UsbFile file: usbFiles) {
+            if(file.isDirectory()) {
+                Log.d(TAG, file.getName()+" is a folder");
+                traverseAndFindVideos(Arrays.asList(file.listFiles()));
+            } else if(VideoUtils.isVideoFile(file.getName())) {
+                Log.d(TAG, file.getName()+" is a video");
+                String path = "file://WDO_MEDIA32/"+file.getName();
+//                file.read(0,);
+                Log.d(TAG, "Try "+path);
+
+
+                //Let's delete this video and all like it from our video database
+                List<Video> videos = Select
+                        .from(Video.class)
+                        .where(Condition.prop("video_url").like("%" + file.getName() + "%"))
+                        .list();
+                Log.d(TAG, "Purging "+videos.size()+" item(s)");
+                for(Video v: videos) {
+                    Log.d(TAG, "Deleting "+v.getVideoUrl());
+                    v.delete();
+                }
+
+                /*Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(Uri.parse(path), VideoUtils.getMimeType(path, true));
+                startActivity(i);*/
+                Video usbVideo = new Video();
+                usbVideo.setVideoUrl(new SuperFile(file).getPath());
+                usbVideo.setName(file.getName());
+                usbVideo.setCreated(file.createdAt());
+                usbVideo.setIsMovie(true);
+                usbVideo.setIsMatched(false);
+//                usbVideo.setFile(new SuperFile(file));
+                usbVideo.setOverview(file.getName()); //VideoColumns.Description
+                Log.d(TAG, usbVideo.toString());
+                usbVideo.save();
+                DownloadTaskHelper.updateSingleVideo(usbVideo, new DownloadTaskHelper.DownloadTaskListener() {
+                    @Override
+                    public void onDownloadFinished() {
+                        refresh();
+                    }
+                });
+//                Log.d(TAG, file.getParent().getName());
+            } else {
+                Log.d(TAG,"Ignore "+file.getName());
+            }
+        }
+        refresh();
+    }
+
+    /*public void cacheFile(UsbFile entry) throws IOException {
+        CopyTaskParam param = new CopyTaskParam();
+        param.from = entry;
+        File f = new File(Environment.getExternalStorageDirectory().getAbsolutePath()
+                + "/usbfileman/cache");
+        f.mkdirs();
+        int index = entry.getName().lastIndexOf(".");
+        String prefix = entry.getName().substring(0, index);
+        String ext = entry.getName().substring(index);
+        // prefix must be at least 3 characters
+        if(prefix.length() < 3) {
+            prefix += "pad";
+        }
+        param.to = File.createTempFile(prefix, ext, f);
+        new CopyTask().execute(param);
+    }*/
+
 }

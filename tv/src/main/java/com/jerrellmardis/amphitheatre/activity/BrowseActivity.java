@@ -18,6 +18,7 @@ package com.jerrellmardis.amphitheatre.activity;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.util.Log;
 
 import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.util.Utils;
@@ -28,6 +29,7 @@ public class BrowseActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_browse);
+        Log.d("amp:BrowseActivity", "Created activity, schedule library update");
         Utils.scheduleLibraryUpdateService(this);
     }
 }

@@ -27,6 +27,7 @@ import com.jerrellmardis.amphitheatre.widget.SeasonCardPresenter;
 import com.squareup.picasso.Picasso;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -59,6 +60,8 @@ public class DetailRowBuilderTask extends AsyncTask<Video, Integer, DetailsOverv
 
     private static final int ACTION_PLAY = 1;
     private static final int ACTION_VIEW_TRAILER = 2;
+    private static final int ACTION_MORE_INFO = 3;
+
     private static final int DETAIL_THUMB_HEIGHT = 274;
     private static final int DETAIL_THUMB_WIDTH = Math.round(DETAIL_THUMB_HEIGHT * (2 / 3f));
 
@@ -103,6 +106,9 @@ public class DetailRowBuilderTask extends AsyncTask<Video, Integer, DetailsOverv
                     new Action(ACTION_VIEW_TRAILER, mActivity.getString(R.string.watch_trailer)));
         }
 
+        //If overview window is too small for content
+        row.addAction(new Action(ACTION_MORE_INFO, "More Info"));
+
         return row;
     }
 
@@ -119,10 +125,14 @@ public class DetailRowBuilderTask extends AsyncTask<Video, Integer, DetailsOverv
             public void onActionClicked(Action action) {
                 if (action.getId() == ACTION_PLAY) {
                     VideoUtils.playVideo(new WeakReference<Activity>(mActivity), mVideo);
-                }
-                else if (action.getId() == ACTION_VIEW_TRAILER) {
+                } else if (action.getId() == ACTION_VIEW_TRAILER) {
                     Uri trailerUri = Uri.parse(mVideo.getMovie().getTrailer());
                     mActivity.startActivity(new Intent(Intent.ACTION_VIEW, trailerUri));
+                } else if(action.getId() == ACTION_MORE_INFO) {
+                    AlertDialog ad = new AlertDialog.Builder(mActivity)
+                            .setTitle(mVideo.getName())
+                            .setMessage(mVideo.getOverview())
+                            .show();
                 }
                 else {
                     Toast.makeText(mActivity, action.toString(), Toast.LENGTH_SHORT).show();

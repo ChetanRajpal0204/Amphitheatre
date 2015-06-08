@@ -21,9 +21,8 @@ import android.content.Intent;
 import android.util.Log;
 
 import com.jerrellmardis.amphitheatre.api.ApiClient;
-import com.jerrellmardis.amphitheatre.api.MediaClientFactory;
-import com.jerrellmardis.amphitheatre.api.TMDbClient;
 import com.jerrellmardis.amphitheatre.model.Source;
+import com.jerrellmardis.amphitheatre.model.SuperFile;
 import com.jerrellmardis.amphitheatre.model.Video;
 import com.jerrellmardis.amphitheatre.model.tmdb.Config;
 import com.jerrellmardis.amphitheatre.task.DownloadTaskHelper;
@@ -32,6 +31,7 @@ import com.jerrellmardis.amphitheatre.util.SecurePreferences;
 import com.orm.query.Condition;
 import com.orm.query.Select;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,7 +47,7 @@ import static com.jerrellmardis.amphitheatre.model.Source.Type;
  */
 public class LibraryUpdateService extends IntentService {
 
-    private static final String TAG = "LibraryUpdateService";
+    private static final String TAG = "amp:LibraryUpdate";
 
     public LibraryUpdateService() {
         super("LibraryUpdateService");
@@ -55,32 +55,40 @@ public class LibraryUpdateService extends IntentService {
 
     @Override
     protected void onHandleIntent(Intent intent) {
+        Log.d(TAG, "Update library");
         try {
             List<Source> sources = Source.listAll(Source.class);
+            Log.d(TAG, "Found "+sources.size()+" sources");
 
             if (sources != null && !sources.isEmpty()) {
                 SecurePreferences prefs = new SecurePreferences(getApplicationContext());
                 String user = prefs.getString(Constants.PREFS_USER_KEY, "");
                 String pass = prefs.getString(Constants.PREFS_PASSWORD_KEY, "");
 
-                Config config = ApiClient.getInstance().createTMDbClient().getConfig();
+                try {
+                    Config config = ApiClient.getInstance().createTMDbClient().getConfig();
 
-                for (Source source : sources) {
-                    // get a list of files on the device
-                    List<SmbFile> systemFiles = DownloadTaskHelper.getFiles(user, pass, getPath(source));
+                    for (Source source : sources) {
+                        // get a list of files on the device
+                        List<SmbFile> systemFiles = DownloadTaskHelper.getFiles(user, pass, getPath(source));
 
-                    if (systemFiles != null && !systemFiles.isEmpty()) {
-                        // convert the list of SmbFiles to a Map of file paths to SmbFiles
-                        Map<String, SmbFile> systemFileMap = new HashMap<String, SmbFile>(systemFiles.size());
-                        for (SmbFile file : systemFiles) {
-                            systemFileMap.put(file.getPath(), file);
+                        if (systemFiles != null && !systemFiles.isEmpty()) {
+                            // convert the list of SmbFiles to a Map of file paths to SmbFiles
+                            Map<String, SmbFile> systemFileMap = new HashMap<String, SmbFile>(systemFiles.size());
+                            for (SmbFile file : systemFiles) {
+                                systemFileMap.put(file.getPath(), file);
+                            }
+
+                            reconcileVideoFiles(source, config, systemFileMap);
                         }
-
-                        reconcileVideoFiles(source, config, systemFileMap);
                     }
+
+                    sendBroadcast(new Intent(Constants.LIBRARY_UPDATED_ACTION));
+                } catch(Exception e) {
+
                 }
 
-                sendBroadcast(new Intent(Constants.LIBRARY_UPDATED_ACTION));
+
             }
         } catch (Exception e) {
             Log.e(TAG, "An error occurred while updating the library.", e);
@@ -98,7 +106,7 @@ public class LibraryUpdateService extends IntentService {
 
         if (videos != null && !videos.isEmpty()) {
             // convert the list of videos saved in the db to a Map of file paths to Videos
-            Map<String, Video> dbFileMap = new HashMap<String, Video>(videos.size());
+            Map<String, Video> dbFileMap = new HashMap<>(videos.size());
             for (Video video : videos) {
                 dbFileMap.put(video.getVideoUrl(), video);
             }
@@ -128,11 +136,17 @@ public class LibraryUpdateService extends IntentService {
             // ignore failures, continue on
             if (!systemFileMap.values().isEmpty()) {
                 for (SmbFile file : systemFileMap.values()) {
-                    if (isMovie) {
-                        try { DownloadTaskHelper.downloadMovieData(config, file); } catch (Exception e) { /* do nothing */ }
-                    } else {
-                        try { DownloadTaskHelper.downloadTvShowData(config, file); } catch (Exception e) { /* do nothing */ }
+                    //Don't manage per movie or per tv show. Let's figure that out if we can
+                    try {
+                        DownloadTaskHelper.downloadFileData(config, new SuperFile(file));
+                    } catch(Exception e) {
+                        //Do nothing
                     }
+                    /*if (isMovie) {
+                        try { DownloadTaskHelper.downloadMovieData(config, file); } catch (Exception e) { *//* do nothing *//* }
+                    } else {
+                        try { DownloadTaskHelper.downloadTvShowData(config, file); } catch (Exception e) { *//* do nothing *//* }
+                    }*/
                 }
             }
         }
