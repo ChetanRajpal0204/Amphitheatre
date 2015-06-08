@@ -18,6 +18,10 @@ package com.jerrellmardis.amphitheatre.task;
 
 import android.content.Context;
 import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
+import android.widget.Toast;
 
 import com.jerrellmardis.amphitheatre.api.ApiClient;
 import com.jerrellmardis.amphitheatre.api.TMDbClient;
@@ -75,7 +79,21 @@ public class GetFilesTask extends AsyncTask<Void, Void, List<SmbFile>> implement
     @Override
     protected List<SmbFile> doInBackground(Void... params) {
         mConfig = ApiClient.getInstance().createTMDbClient().getConfig();
-        return new ArrayList<SmbFile>(DownloadTaskHelper.getFiles(mUser, mPassword, mPath));
+        ArrayList<SmbFile> myFiles = new ArrayList<SmbFile>(DownloadTaskHelper.getFiles(mUser, mPassword, mPath));
+        if(myFiles.isEmpty()) {
+            Handler h = new Handler(Looper.getMainLooper()) {
+                @Override
+                public void handleMessage(Message msg) {
+                    super.handleMessage(msg);
+                    Toast.makeText(mContext, "Cannot find any files. Make sure your authentication information is correct.", Toast.LENGTH_SHORT)
+                            .show();
+                }
+            };
+            h.sendEmptyMessage(0);
+            return new ArrayList<SmbFile>(); //Return empty set
+        } else {
+            return myFiles;
+        }
     }
 
     @Override
@@ -89,6 +107,7 @@ public class GetFilesTask extends AsyncTask<Void, Void, List<SmbFile>> implement
 
             mNumOfSets = subSets.size();
 
+            //TODO This is really stupid. Fix.
             for (List<SmbFile> subSet : subSets) {
                 if (mIsMovie) {
                     new DownloadMovieTask(mContext, mConfig, subSet, this)

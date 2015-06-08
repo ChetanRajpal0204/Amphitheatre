@@ -18,6 +18,7 @@ package com.jerrellmardis.amphitheatre.task;
 
 import com.jerrellmardis.amphitheatre.api.ApiClient;
 import com.jerrellmardis.amphitheatre.api.GuessItClient;
+import com.jerrellmardis.amphitheatre.model.FileSource;
 import com.jerrellmardis.amphitheatre.model.SuperFile;
 import com.jerrellmardis.amphitheatre.model.Video;
 import com.jerrellmardis.amphitheatre.model.guessit.Guess;
@@ -28,6 +29,8 @@ import com.jerrellmardis.amphitheatre.model.tmdb.SearchResult;
 import com.jerrellmardis.amphitheatre.model.tmdb.TvShow;
 import com.jerrellmardis.amphitheatre.util.Constants;
 import com.jerrellmardis.amphitheatre.util.VideoUtils;
+import com.orm.query.Condition;
+import com.orm.query.Select;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.text.WordUtils;
@@ -37,9 +40,15 @@ import android.os.Looper;
 import android.os.Message;
 import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Toast;
 
+import java.net.MalformedURLException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import jcifs.smb.NtlmPasswordAuthentication;
 import jcifs.smb.SmbException;
@@ -52,16 +61,147 @@ public final class DownloadTaskHelper {
     private static final String TAG = "amp:DownloadTaskHlpr";
 
     public static List<SmbFile> getFiles(String user, String password, String path) {
+        Log.d(TAG, path+" "+user+"//"+password);
         NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication("", user, password);
 
         List<SmbFile> files = Collections.emptyList();
-        try {
-            files = VideoUtils.getFilesFromDir(path, auth);
+        /*try {
+//            files = VideoUtils.getFilesFromDir(path, auth);
         } catch (Exception e) {
+            Log.d(TAG, e.getMessage()+"");
+            e.printStackTrace();
+            return new ArrayList<>();
+        }*/
+        //Let's do this in a way that's not going to blow out the memory of the device
+        Log.d(TAG, "getting files from dir "+path+" with auth "+auth.getDomain()+" "+auth.getName()+" "+auth.getUsername()+" "+auth.getPassword());
+        SmbFile baseDir = null;
+        try {
+            baseDir = new SmbFile(path, auth);
+            Log.d(TAG, "Base Directory: " + baseDir.getName() + ", " + baseDir.getPath());
+            traverseSmbFiles(baseDir, auth);
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        } catch (SmbException e) {
             e.printStackTrace();
         }
 
+
+        /*while (!queue.isEmpty()) {
+            SmbFile file = queue.removeFirst();
+            seen.add(file);
+            Log.d(TAG, file.getName()+", "+file.getPath());
+
+            if (file.isDirectory()) {
+                Log.d(TAG, "Found directory " +file.getName()+", "+file.getPath());
+                Set<SmbFile> smbFiles = new LinkedHashSet<SmbFile>();
+                try {
+                    Collections.addAll(smbFiles, file.listFiles());
+                    Log.d(TAG, "Got past "+file.getName());
+                    //TODO Let's create a dialog to show all this stuff
+                } catch(Exception e) {
+                    Log.d(TAG, "List files failed "+e.getMessage());
+                }
+
+                for (SmbFile child : smbFiles) {
+                    if (!seen.contains(child)) {
+                        queue.add(child);
+                    }
+                }
+            } else if (VideoUtils.isVideoFile(file.getName())) {
+                results.add(file);
+            }
+        }*/
+
         return files;
+    }
+
+    public static void traverseSmbFiles(SmbFile root, NtlmPasswordAuthentication auth) throws SmbException, MalformedURLException {
+        for(SmbFile f: root.listFiles()) {
+            if(f.isDirectory()) {
+                try {
+                    SmbFile[] directoryContents = f.listFiles();
+//                    Log.d(TAG, "Going into directory "+f.getPath());
+                    //If this works, then we can explore
+                    //Let's do some quick name checking to for time savings
+                    if(!f.getName().contains("iTunes")
+                            && !f.getName().contains("Digi Pix")
+                            && !f.getName().contains("AppData")
+                            && !f.getName().startsWith(".")
+                            && !f.getName().contains("Avid")
+                            && !f.getName().contains("Spotify"))
+                        traverseSmbFiles(f, auth);
+                } catch(Exception e) {
+                    //This folder isn't accessible
+                    Log.d(TAG, "Inaccessible: "+f.getName());
+                    //This will save us time in the traversal
+                }
+            } else {
+                //Is this something we want to add?
+                if(VideoUtils.isVideoFile(f.getPath())) {
+                    //Perhaps. Let's do some checking.
+                    /* VOB check
+                        If the files are in a structure like:
+                        { Movie Name } -> VIDEO_TS -> VTS_nn_n.vob
+
+                        Then use the movie name as the source, and each vob url will
+                        be added in a comma-separated list to the video url string
+                    */
+                    Video v = new Video();
+                    if(f.getParent().equals("VIDEO_TS")) {
+                        Log.d(TAG, "Special case for "+f.getPath());
+                        //We have a special case!
+                        String grandparentPath = f.getPath().substring(0, f.getPath().indexOf("VIDEO_TS"));
+                        SmbFile grandparent = new SmbFile(grandparentPath, auth);
+
+                        //Let's delete this video and all like it from our video database
+                        List<Video> videos = Select
+                                .from(Video.class)
+                                .where(Condition.prop("video_url").like("%" + grandparent.getPath() + "%"))
+                                .list();
+                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
+                        for(Video vx: videos) {
+                            Log.d(TAG, "Deleting "+vx.getVideoUrl());
+                            vx.delete();
+                        }
+
+                        v.setName(grandparent.getName());
+                        v.setSource(FileSource.SMB);
+                        //Get all the video files
+                        ArrayList<String> urls = new ArrayList<>();
+                        for(SmbFile f2: grandparent.listFiles()) {
+                            for(SmbFile f3: f2.listFiles()) {
+                                if(VideoUtils.isVideoFile(f3.getPath())) {
+                                    //Presumably in order
+                                    urls.add(f3.getPath());
+                                }
+                            }
+                        }
+                        v.setVideoUrl(urls);
+                    } else {
+                        //Add the video like normal
+                        //Let's delete this video and all like it from our video database
+                        List<Video> videos = Select
+                                .from(Video.class)
+                                .where(Condition.prop("video_url").like("%" + f.getPath() + "%"))
+                                .list();
+                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
+                        for(Video vx: videos) {
+                            Log.d(TAG, "Deleting "+vx.getVideoUrl());
+                            vx.delete();
+                        }
+
+                        v.setName(f.getName());
+                        v.setSource(FileSource.SMB);
+                        v.setVideoUrl(f.getPath());
+                    }
+
+                    Log.d(TAG, v.toString());
+                    v.save();
+                    updateSingleVideo(v, null);
+                }
+                //Ignore otherwise
+            }
+        }
     }
 
     /**
@@ -71,193 +211,223 @@ public final class DownloadTaskHelper {
      * @param dtl Listener for when the method finishes, so we can call refresh on the UI thread
      */
     public static void updateSingleVideo(final Video video, final DownloadTaskListener dtl) {
+        //TODO Do a check for video's parent and if it is a nameless VOB, use the parent instead
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Config config = ApiClient.getInstance().createTMDbClient().getConfig();
-                if (TextUtils.isEmpty(video.getVideoUrl()) || video.getName().toLowerCase().contains(Constants.SAMPLE)) {
-                    return;
-                }
+                try {
+                    Config config = ApiClient.getInstance().createTMDbClient().getConfig();
+                    if (TextUtils.isEmpty(video.getVideoUrl()) || video.getName().toLowerCase().contains(Constants.SAMPLE)) {
+                        return;
+                    }
 
-                Guess guess = GuessItClient.guess(video.getName());
+                    Guess guess = GuessItClient.guess(video.getName());
 
-                // if a guess is not found, search again using the parent directory's name
-                if (guess != null &&
-                        (TextUtils.isEmpty(guess.getTitle()) || guess.getTitle().equals(video.getName()))) {
+                    if(guess == null) {
+                        Log.d(TAG, "There's nothing here for me");
+                        return;
+                    }
 
-                    String[] sections = video.getVideoUrl().split("/");
-                    String name = sections[sections.length - 2];
+                    // if a guess is not found, search again using the parent directory's name
+                    if (guess != null &&
+                            (TextUtils.isEmpty(guess.getTitle()) || guess.getTitle().equals(video.getName()))) {
 
-                    int indexOf = video.getVideoUrl().lastIndexOf(".");
-                    String ext = video.getVideoUrl().substring(indexOf, video.getVideoUrl().length());
-                    guess = GuessItClient.guess(name + ext);
+                        String[] sections = video.getVideoUrl().split("/");
+                        String name = sections[sections.length - 2];
+
+                        int indexOf = video.getVideoUrl().lastIndexOf(".");
+                        String ext = video.getVideoUrl().substring(indexOf, video.getVideoUrl().length());
+                        guess = GuessItClient.guess(name + ext);
 //                    Log.d(TAG, guess.toString());
-                }
+                    }
 
-                video.setCreated(video.getCreated());
-                Log.d(TAG, video.getName()+" => "+guess.toString());
+                    video.setCreated(video.getCreated());
+                    Log.d(TAG, video.getName()+" => "+guess.toString());
 
-                //Don't update video and ragequit
-                if (guess == null || TextUtils.isEmpty(guess.getTitle())) {
-                    Log.d(TAG, "There's nothing here for me");
-                    return;
-                }
-                if(guess.getTitle().equals("0")) {
+                    //Don't update video and ragequit
+                    if (guess == null || TextUtils.isEmpty(guess.getTitle())) {
+                        Log.d(TAG, "There's nothing here for me");
+                        return;
+                    }
+                    if(guess.getTitle().equals("0")) {
                     /*  This means the guess came back undefined
                         If I decided to pursue with the movie request, it would apparently
                         return with Tai Chi Zero as the title. This is not correct, so I cannot
                         pursue with this request.
                     */
 
-                    Log.d(TAG, "There's nothing here for me");
-                    return;
-                }
+                        Log.d(TAG, "There's nothing here for me");
+                        return;
+                    }
 
 
 
-                //Not rage quitting; plowing ahead
-                video.setName(WordUtils.capitalizeFully(guess.getTitle()));
+                    //Not rage quitting; plowing ahead
+                    video.setName(WordUtils.capitalizeFully(guess.getTitle()));
 //        video.setVideoUrl(video.getVideoUrl());
-                video.setIsMovie(guess.getType().contains("movie"));
-                if(!guess.getType().contains("movie")) {
-                    //tv logic
-                    if (!TextUtils.isEmpty(guess.getSeries())) {
-                        try {
-                            TvShow tvShow = null;
-                            Long tmdbId = null;
+                    video.setIsMovie(guess.getType().contains("movie"));
+                    if(!guess.getType().contains("movie")) {
+                        //tv logic
+                        if (!TextUtils.isEmpty(guess.getSeries())) {
+                            try {
+                                TvShow tvShow = null;
+                                Long tmdbId = null;
 
-                            // look for the TV show in the database first
-                            List<TvShow> tvShows = TvShow.find(TvShow.class, "original_name = ?",
-                                    guess.getSeries());
+                                // look for the TV show in the database first
+                                List<TvShow> tvShows = TvShow.find(TvShow.class, "original_name = ?",
+                                        guess.getSeries());
 
-                            // if a TV show is found, clone it.
-                            // if not, run a TMDb search for the TV show
-                            if (tvShows != null && !tvShows.isEmpty()) {
-                                tvShow = TvShow.copy(tvShows.get(0));
-                                tmdbId = tvShow.getTmdbId();
-                            } else {
-                                SearchResult result;
-                                result = ApiClient.getInstance().createTMDbClient()
-                                        .findTvShow(guess.getSeries());
-                                if(result == null) {
-                                    result = ApiClient.getInstance().createTVDBClient()
+                                // if a TV show is found, clone it.
+                                // if not, run a TMDb search for the TV show
+                                if (tvShows != null && !tvShows.isEmpty()) {
+                                    tvShow = TvShow.copy(tvShows.get(0));
+                                    tmdbId = tvShow.getTmdbId();
+                                } else {
+                                    SearchResult result;
+                                    result = ApiClient.getInstance().createTMDbClient()
                                             .findTvShow(guess.getSeries());
-                                }
-                                if (result.getResults() != null && !result.getResults().isEmpty()) {
-                                    tmdbId = result.getResults().get(0).getId();
-                                    tvShow = ApiClient.getInstance().createTMDbClient().getTvShow(tmdbId);
-                                    if(tvShow == null) {
-                                        tvShow = ApiClient.getInstance().createTVDBClient().getTvShow(tmdbId);
+                                    if(result == null) {
+                                        result = ApiClient.getInstance().createTVDBClient()
+                                                .findTvShow(guess.getSeries());
                                     }
-                                    tvShow.setTmdbId(tmdbId);
-                                    tvShow.setId(null);
-                                    tvShow.setFlattenedGenres(StringUtils.join(tvShow.getGenres(), ","));
-                                }
-                            }
-
-                            if (tmdbId != null) {
-                                // get the Episode information
-                                if (guess.getEpisodeNumber() != null && guess.getSeason() != null) {
-                                    Episode episode;
-                                    episode = ApiClient.getInstance().createTMDbClient()
-                                            .getEpisode(tvShow.getTmdbId(),
-                                                    guess.getSeason(), guess.getEpisodeNumber());
-                                    if (episode == null) {
-                                        episode = ApiClient.getInstance().createTVDBClient()
-                                                .getEpisode(tvShow.getId(),tvShow.getEpisode().getAirDate());
-                                    }
-                                    if (episode != null) {
-                                        if (!TextUtils.isEmpty(episode.getStillPath())) {
-                                            String stillPathUrl = config.getImages().getBase_url() + "original" +
-                                                    episode.getStillPath();
-                                            episode.setStillPath(stillPathUrl);
+                                    if (result.getResults() != null && !result.getResults().isEmpty()) {
+                                        tmdbId = result.getResults().get(0).getId();
+                                        tvShow = ApiClient.getInstance().createTMDbClient().getTvShow(tmdbId);
+                                        if(tvShow == null) {
+                                            tvShow = ApiClient.getInstance().createTVDBClient().getTvShow(tmdbId);
                                         }
+                                        tvShow.setTmdbId(tmdbId);
+                                        tvShow.setId(null);
+                                        tvShow.setFlattenedGenres(StringUtils.join(tvShow.getGenres(), ","));
+                                    }
+                                }
 
-                                        episode.setTmdbId(tmdbId);
-                                        episode.setId(null);
+                                if (tmdbId != null) {
+                                    // get the Episode information
+                                    if (guess.getEpisodeNumber() != null && guess.getSeason() != null) {
+                                        Episode episode;
+                                        episode = ApiClient.getInstance().createTMDbClient()
+                                                .getEpisode(tvShow.getTmdbId(),
+                                                        guess.getSeason(), guess.getEpisodeNumber());
+                                        if (episode == null) {
+                                            episode = ApiClient.getInstance().createTVDBClient()
+                                                    .getEpisode(tvShow.getId(),tvShow.getEpisode().getAirDate());
+                                        }
+                                        if (episode != null) {
+                                            if (!TextUtils.isEmpty(episode.getStillPath())) {
+                                                String stillPathUrl = config.getImages().getBase_url() + "original" +
+                                                        episode.getStillPath();
+                                                episode.setStillPath(stillPathUrl);
+                                            }
 
-                                        episode.save();
-                                        tvShow.setEpisode(episode);
+                                            episode.setTmdbId(tmdbId);
+                                            episode.setId(null);
+
+                                            episode.save();
+                                            tvShow.setEpisode(episode);
+                                            video.setIsMatched(true);
+                                        }
+                                    }
+
+                                    tvShow.save();
+
+                                    video.setName(tvShow.getOriginalName());
+                                    video.setOverview(tvShow.getOverview());
+                                    video.setTvShow(tvShow);
+
+                                    String cardImageUrl = config.getImages().getBase_url() + "original" +
+                                            tvShow.getPosterPath();
+                                    video.setCardImageUrl(cardImageUrl);
+
+                                    String bgImageUrl = config.getImages().getBase_url() + "original" +
+                                            tvShow.getBackdropPath();
+                                    video.setBackgroundImageUrl(bgImageUrl);
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+
+                        video.save();
+                    } else {
+                        //movie logic
+                        if (!TextUtils.isEmpty(guess.getTitle())) {
+                            try {
+                                // search for the movie
+                                SearchResult result = ApiClient
+                                        .getInstance().createTMDbClient().findMovie(guess.getTitle(),
+                                                guess.getYear());
+
+                                // if found, get the detailed info for the movie
+                                if (result.getResults() != null && !result.getResults().isEmpty()) {
+                                    Long id = result.getResults().get(0).getId();
+
+                                    if (id != null) {
+                                        Movie movie;
+                                        movie = ApiClient.getInstance().createTMDbClient().getMovie(id);
+                                        if(movie == null) {
+                                            movie = ApiClient.getInstance().createTVDBClient().getMovie(id);
+                                        }
+                                        movie.setTmdbId(id);
+                                        movie.setId(null);
+                                        movie.setFlattenedGenres(StringUtils.join(movie.getGenres(), ","));
+                                        movie.setFlattenedProductionCompanies(
+                                                StringUtils.join(movie.getProductionCompanies(), ","));
+                                        movie.save();
+
+                                        video.setOverview(movie.getOverview());
+                                        video.setName(movie.getTitle());
                                         video.setIsMatched(true);
+                                        video.setMovie(movie);
                                     }
+
+                                    String cardImageUrl = config.getImages().getBase_url() + "original" +
+                                            result.getResults().get(0).getPoster_path();
+                                    video.setCardImageUrl(cardImageUrl);
+
+                                    String bgImageUrl = config.getImages().getBase_url() + "original" +
+                                            result.getResults().get(0).getBackdrop_path();
+                                    video.setBackgroundImageUrl(bgImageUrl);
                                 }
-
-                                tvShow.save();
-
-                                video.setName(tvShow.getOriginalName());
-                                video.setOverview(tvShow.getOverview());
-                                video.setTvShow(tvShow);
-
-                                String cardImageUrl = config.getImages().getBase_url() + "original" +
-                                        tvShow.getPosterPath();
-                                video.setCardImageUrl(cardImageUrl);
-
-                                String bgImageUrl = config.getImages().getBase_url() + "original" +
-                                        tvShow.getBackdropPath();
-                                video.setBackgroundImageUrl(bgImageUrl);
+                            } catch (Exception e) {
+                                e.printStackTrace();
                             }
-                        } catch (Exception e) {
-                            e.printStackTrace();
                         }
-                    }
 
-                    video.save();
-                } else {
-                    //movie logic
-                    if (!TextUtils.isEmpty(guess.getTitle())) {
+                        video.save();
+                    }
+                    Log.d("amp:DownloadTaskHelper", video.toString());
+                    Handler h = new Handler(Looper.getMainLooper()) {
+                        @Override
+                        public void handleMessage(Message msg) {
+                            super.handleMessage(msg);
+                            Log.d(TAG, video.toString());
+                            if(dtl != null)
+                                dtl.onDownloadFinished();
+                        }
+                    };
+                    h.sendEmptyMessage(0);
+                } catch(Exception e) {
+                    /*
+                    8510-9779/com.jerrellmardis.amphitheatre.dev E/AndroidRuntime? FATAL EXCEPTION: Thread-3591
+                    Process: com.jerrellmardis.amphitheatre.dev, PID: 8510
+                    retrofit.RetrofitError: 429
+                     */
+                    Log.e(TAG, e.getMessage());
+                    if(e.getMessage().contains("429")) {
+                        //Too many requests, return in 15 seconds
                         try {
-                            // search for the movie
-                            SearchResult result = ApiClient
-                                    .getInstance().createTMDbClient().findMovie(guess.getTitle(),
-                                            guess.getYear());
-
-                            // if found, get the detailed info for the movie
-                            if (result.getResults() != null && !result.getResults().isEmpty()) {
-                                Long id = result.getResults().get(0).getId();
-
-                                if (id != null) {
-                                    Movie movie;
-                                    movie = ApiClient.getInstance().createTMDbClient().getMovie(id);
-                                    if(movie == null) {
-                                        movie = ApiClient.getInstance().createTVDBClient().getMovie(id);
-                                    }
-                                    movie.setTmdbId(id);
-                                    movie.setId(null);
-                                    movie.setFlattenedGenres(StringUtils.join(movie.getGenres(), ","));
-                                    movie.setFlattenedProductionCompanies(
-                                            StringUtils.join(movie.getProductionCompanies(), ","));
-                                    movie.save();
-
-                                    video.setOverview(movie.getOverview());
-                                    video.setName(movie.getTitle());
-                                    video.setIsMatched(true);
-                                    video.setMovie(movie);
-                                }
-
-                                String cardImageUrl = config.getImages().getBase_url() + "original" +
-                                        result.getResults().get(0).getPoster_path();
-                                video.setCardImageUrl(cardImageUrl);
-
-                                String bgImageUrl = config.getImages().getBase_url() + "original" +
-                                        result.getResults().get(0).getBackdrop_path();
-                                video.setBackgroundImageUrl(bgImageUrl);
+                            synchronized (this) {
+                                this.wait(1000 * 15);
+                                updateSingleVideo(video, dtl);
                             }
-                        } catch (Exception e) {
-                            e.printStackTrace();
+                            return;
+                        } catch (InterruptedException e1) {
+                            e1.printStackTrace();
+                            return;
                         }
                     }
-
-                    video.save();
                 }
-                Log.d("amp:DownloadTaskHelper", video.toString());
-                Handler h = new Handler(Looper.getMainLooper()) {
-                    @Override
-                    public void handleMessage(Message msg) {
-                        super.handleMessage(msg);
-                        dtl.onDownloadFinished();
-                    }
-                };
-                h.sendEmptyMessage(0);
             }
         }).start();
     }

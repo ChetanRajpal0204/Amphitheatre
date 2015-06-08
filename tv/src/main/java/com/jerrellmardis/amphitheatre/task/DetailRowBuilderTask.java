@@ -131,7 +131,7 @@ public class DetailRowBuilderTask extends AsyncTask<Video, Integer, DetailsOverv
                 } else if(action.getId() == ACTION_MORE_INFO) {
                     AlertDialog ad = new AlertDialog.Builder(mActivity)
                             .setTitle(mVideo.getName())
-                            .setMessage(mVideo.getOverview())
+                            .setMessage(mVideo.getOverview()+"\n\n"+mVideo.getVideoUrl())
                             .show();
                 }
                 else {

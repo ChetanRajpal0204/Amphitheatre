@@ -6,5 +6,5 @@ import java.io.Serializable;
  * Created by N on 6/7/2015.
  */
 public enum FileSource implements Serializable {
-    INTERNAL_STORAGE, USB, LAN, SMB
+    INTERNAL_STORAGE, USB, SMB
 }

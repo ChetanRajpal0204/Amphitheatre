@@ -22,6 +22,7 @@ import android.app.DialogFragment;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -80,6 +81,10 @@ public class AddSourceDialogFragment extends DialogFragment implements OnSharesF
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_add_source_dialog, container);
         ButterKnife.inject(this, view);
+        Log.d("amp:AddSourceDialog", "Created dialog");
+        ((EditText) view.findViewById(R.id.path)).setText("255.255.255.255");
+        ((EditText) view.findViewById(R.id.user)).setText("user");
+        ((EditText) view.findViewById(R.id.password)).setText("password");
         return view;
     }
 

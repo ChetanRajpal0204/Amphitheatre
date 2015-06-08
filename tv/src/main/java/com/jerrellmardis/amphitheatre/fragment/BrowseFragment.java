@@ -67,6 +67,7 @@ import com.jerrellmardis.amphitheatre.model.Source;
 import com.jerrellmardis.amphitheatre.model.SuperFile;
 import com.jerrellmardis.amphitheatre.model.Video;
 import com.jerrellmardis.amphitheatre.model.VideoGroup;
+import com.jerrellmardis.amphitheatre.service.LibraryUpdateService;
 import com.jerrellmardis.amphitheatre.service.RecommendationsService;
 import com.jerrellmardis.amphitheatre.task.DownloadTaskHelper;
 import com.jerrellmardis.amphitheatre.task.GetFilesTask;
@@ -571,7 +572,8 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         HeaderItem gridHeader = new HeaderItem(0, getString(R.string.settings), null);
         ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(new GridItemPresenter(getActivity()));
         gridRowAdapter.add(getString(R.string.add_source));
-//        gridRowAdapter.add("New LAN Source");
+        gridRowAdapter.add("Refresh");
+        gridRowAdapter.add("Library Update Service");
         gridRowAdapter.add(getString(R.string.customization));
         //TODO If I want to make any other settings, do so here
         //TODO Add credits section for the libaums
@@ -711,6 +713,12 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                     showCustomizeDialog();
                 } else if (item instanceof String && ((String) item).contains("LAN")) {
                     showAddLanDialog();
+                } else if (item instanceof String && ((String) item).contains("Library Update Service")) {
+                    Log.d(TAG, "Starting library update");
+                    Intent intent = new Intent(getActivity(), LibraryUpdateService.class);
+                    getActivity().startService(intent);
+                } else if (item instanceof String && ((String) item).contains("Refresh")) {
+                    refresh();
                 }
             }
         };

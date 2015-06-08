@@ -293,16 +293,27 @@ public class VideoUtils {
         Set<SmbFile> seen = new LinkedHashSet<SmbFile>();
         Deque<SmbFile> queue = new ArrayDeque<SmbFile>();
 
+        Log.d(TAG, "getting files from dir "+path+" with auth "+auth.getDomain()+" "+auth.getName()+" "+auth.getUsername()+" "+auth.getPassword());
         SmbFile baseDir = new SmbFile(path, auth);
+        //See if this worked
+        Log.d(TAG, baseDir.getName()+", "+baseDir.getPath());
         queue.add(baseDir);
 
         while (!queue.isEmpty()) {
             SmbFile file = queue.removeFirst();
             seen.add(file);
+            Log.d(TAG, file.getName()+", "+file.getPath());
 
             if (file.isDirectory()) {
+                Log.d(TAG, "Found directory " +file.getName()+", "+file.getPath());
                 Set<SmbFile> smbFiles = new LinkedHashSet<SmbFile>();
-                Collections.addAll(smbFiles, file.listFiles());
+                try {
+                    Collections.addAll(smbFiles, file.listFiles());
+                    Log.d(TAG, "Got past "+file.getName());
+                    //TODO Let's create a dialog to show all this stuff
+                } catch(Exception e) {
+                    Log.d(TAG, "List files failed "+e.getMessage());
+                }
 
                 for (SmbFile child : smbFiles) {
                     if (!seen.contains(child)) {

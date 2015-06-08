@@ -60,6 +60,7 @@ public class Video extends SugarRecord<Video> implements Serializable {
     private boolean isWatched;
     //TODO thumbnail generation
     private FileSource source;
+    //private boolean hidden
 //    private SuperFile file;
 
     public String getName() {
@@ -96,8 +97,17 @@ public class Video extends SugarRecord<Video> implements Serializable {
             this.source = FileSource.INTERNAL_STORAGE;
         else if(videoUrl.contains("usb://"))
             this.source = FileSource.USB;
-        else if(videoUrl.contains("lan://"))
-            this.source = FileSource.LAN;
+        else if(videoUrl.contains("smb://"))
+            this.source = FileSource.SMB;
+    }
+    public void setVideoUrl(ArrayList<String> urls) {
+        String list = "";
+        Iterator<String> iterator = urls.iterator();
+        while(iterator.hasNext()) {
+            String url = iterator.next();
+            list += url+",";
+        }
+        videoUrl = list;
     }
     public String[] getVideoUrls() {
         return videoUrl.split(",");
