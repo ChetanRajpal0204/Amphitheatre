@@ -162,10 +162,10 @@ public class VideoUtils {
     }
 
     public static boolean isVideoFile(String s) {
-        String[] fileTypes = new String[]{".3gp", ".aaf.", "mp4", ".ts", ".webm", ".m4v", ".mkv", ".divx", ".xvid", ".rec", ".avi", ".flv", ".f4v", ".moi", ".mpeg", ".mpg", /*".mts", ".m2ts",*/ ".ogv", ".rm", ".rmvb", ".mov", ".wmv", ".iso", ".vob", ".ifo", ".wtv", ".pyv", ".ogm", ".img"};
+        String[] fileTypes = new String[]{".3gp", ".aaf.", "mp4", ".ts", ".webm", ".m4v", ".mkv", ".divx", ".xvid", ".rec", ".avi", ".flv", ".f4v", ".moi", ".mpeg", ".mpg", /*".mts", ".m2ts",*/ ".ogv", ".rm", ".rmvb", ".mov", ".wmv", /*".iso",*/ ".vob", ".ifo", ".wtv", ".pyv", ".ogm", /*".img"*/};
         int count = fileTypes.length;
         for (int i = 0; i < count; i++)
-            if (s.endsWith(fileTypes[i]))
+            if (s.toLowerCase().endsWith(fileTypes[i]))
                 return true;
         return false;
     }

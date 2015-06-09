@@ -264,11 +264,9 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 
     private void loadVideos() {
         List<Video> videos = Source.listAll(Video.class);
-//        Clear current list and repopulate items (non-dupes)
-//        mAdapter.clear();
         if (videos != null && !videos.isEmpty()) {
             for (Video video : videos) {
-                Log.d(TAG, "Loading "+video.getName()+" from "+video.getVideoUrl());
+//                Log.d(TAG, "Loading "+video.getName()+" from "+video.getVideoUrl());
                 addVideoToUi(video);
             }
 
@@ -357,7 +355,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
             // if not, create a new row and add it
             if (row != null) {
                 ((SortedObjectAdapter) row.getAdapter()).add(video);
-                Log.d(TAG, "Null row, adding video at index 0 to unmatched");
+//                Log.d(TAG, "Null row, adding video at index 0 to unmatched");
             } else {
                 SortedObjectAdapter listRowAdapter = new SortedObjectAdapter(
                         videoNameComparator, mCardPresenter);
@@ -365,7 +363,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 
                 HeaderItem header = new HeaderItem(0, getString(R.string.unmatched), null);
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
-                Log.d(TAG, "Adding "+video.getVideoUrl()+" at index "+index+" to Unmatched");
+//                Log.d(TAG, "Adding "+video.getVideoUrl()+" at index "+index+" to Unmatched");
                 mAdapter.add(index, new ListRow(header, listRowAdapter));
             }
         } else if (video.isMovie()) {

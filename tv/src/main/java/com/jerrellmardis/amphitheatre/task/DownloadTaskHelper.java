@@ -81,8 +81,10 @@ public final class DownloadTaskHelper {
             traverseSmbFiles(baseDir, auth);
         } catch (MalformedURLException e) {
             e.printStackTrace();
+            Log.e(TAG, e.getMessage()+"");
         } catch (SmbException e) {
             e.printStackTrace();
+            Log.e(TAG, e.getMessage() + "");
         }
 
 
@@ -116,28 +118,50 @@ public final class DownloadTaskHelper {
     }
 
     public static void traverseSmbFiles(SmbFile root, NtlmPasswordAuthentication auth) throws SmbException, MalformedURLException {
+        int fileCount = 0;
         for(SmbFile f: root.listFiles()) {
+            if(f.getParent().contains("Entertainment Media")) {
+//                Log.d(TAG, "Discovered "+f.getPath()+" "+f.isDirectory());
+            }
             if(f.isDirectory()) {
                 try {
                     SmbFile[] directoryContents = f.listFiles();
 //                    Log.d(TAG, "Going into directory "+f.getPath());
                     //If this works, then we can explore
                     //Let's do some quick name checking to for time savings
+                    if(f.getName().contains("Entertainment Media")) {
+                        Log.d(TAG, Arrays.asList(f.listFiles()).toString());
+                    }
                     if(!f.getName().contains("iTunes")
                             && !f.getName().contains("Digi Pix")
                             && !f.getName().contains("AppData")
                             && !f.getName().startsWith(".")
                             && !f.getName().contains("Avid")
-                            && !f.getName().contains("Spotify"))
+                            && !f.getName().contains("Spotify")
+                            && !f.getName().contains("audacity_temp")
+                            && !f.getName().contains("Media_previews")
+                            && !f.getName().contains("GFX_previews")
+                            && !f.getName().contains("Samsung Install Files")
+                            && !f.getName().contains("AE Renders")
+                            && !f.getName().contains("LocalData")
+                            && !f.getName().contains("Thrive Music Video") //TEMP
+                            && f.getPath().contains("Entertainment") //TEMP
+                            && !f.getName().contains("Preview Files")) {
+                        Log.d(TAG, "Check "+f.getPath());
                         traverseSmbFiles(f, auth);
+                    } else {
+                        Log.d(TAG, "Don't check "+f.getPath());
+                    }
                 } catch(Exception e) {
                     //This folder isn't accessible
-                    Log.d(TAG, "Inaccessible: "+f.getName());
+                    Log.d(TAG, "Inaccessible: "+f.getName()+" "+e.getMessage());
                     //This will save us time in the traversal
                 }
-            } else {
+            } else if(f.getPath().contains("LEGO")){ //TEMP
                 //Is this something we want to add?
+                Log.d(TAG, "Non-directory "+f.getPath());
                 if(VideoUtils.isVideoFile(f.getPath())) {
+                    Log.d(TAG, "Is video");
                     //Perhaps. Let's do some checking.
                     /* VOB check
                         If the files are in a structure like:
@@ -146,25 +170,26 @@ public final class DownloadTaskHelper {
                         Then use the movie name as the source, and each vob url will
                         be added in a comma-separated list to the video url string
                     */
-                    Video v = new Video();
-                    if(f.getParent().equals("VIDEO_TS")) {
+                    final Video v = new Video();
+                    if(f.getPath().contains("VIDEO_TS")) {
                         Log.d(TAG, "Special case for "+f.getPath());
                         //We have a special case!
                         String grandparentPath = f.getPath().substring(0, f.getPath().indexOf("VIDEO_TS"));
                         SmbFile grandparent = new SmbFile(grandparentPath, auth);
 
                         //Let's delete this video and all like it from our video database
+                        //TODO Makes more sense to not delete and replace a video, just to update in place
                         List<Video> videos = Select
                                 .from(Video.class)
-                                .where(Condition.prop("video_url").like("%" + grandparent.getPath() + "%"))
+                                .where(Condition.prop("video_url").like("%" + grandparent.getPath().replace("'", "\'") + "%"))
                                 .list();
-                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
+//                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
                         for(Video vx: videos) {
-                            Log.d(TAG, "Deleting "+vx.getVideoUrl());
+//                            Log.d(TAG, "Deleting "+vx.getVideoUrl());
                             vx.delete();
                         }
 
-                        v.setName(grandparent.getName());
+                        v.setName(grandparent.getName().replace("/", "").replace("_", " ")+".mp2"); //FIXME VOB currently not supported
                         v.setSource(FileSource.SMB);
                         //Get all the video files
                         ArrayList<String> urls = new ArrayList<>();
@@ -177,16 +202,17 @@ public final class DownloadTaskHelper {
                             }
                         }
                         v.setVideoUrl(urls);
+                        Log.d(TAG, "Retrieved info for VOB "+v.toString());
                     } else {
                         //Add the video like normal
                         //Let's delete this video and all like it from our video database
                         List<Video> videos = Select
                                 .from(Video.class)
-                                .where(Condition.prop("video_url").like("%" + f.getPath() + "%"))
+                                .where(Condition.prop("video_url").like("%" + f.getPath().replace("'", "\'") + "%"))
                                 .list();
-                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
+//                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
                         for(Video vx: videos) {
-                            Log.d(TAG, "Deleting "+vx.getVideoUrl());
+//                            Log.d(TAG, "Deleting "+vx.getVideoUrl());
                             vx.delete();
                         }
 
@@ -195,9 +221,22 @@ public final class DownloadTaskHelper {
                         v.setVideoUrl(f.getPath());
                     }
 
-                    Log.d(TAG, v.toString());
-                    v.save();
-                    updateSingleVideo(v, null);
+//                    Log.d(TAG, v.toString());
+                    fileCount++;
+                    Handler h = new Handler(Looper.getMainLooper()) {
+                        @Override
+                        public void handleMessage(Message msg) {
+//                            super.handleMessage(msg);
+                            Log.d(TAG, "Handle "+msg.what);
+                            v.save();
+                            updateSingleVideo(v, null);
+                        }
+
+                    };
+                    //Send a request to update metadata every second, to prevent as many 429 errors and memory exceptions
+                    h.sendEmptyMessageDelayed(1000*fileCount, 1000*fileCount);
+                    Log.d(TAG, "Queued " + 1000 * fileCount + "  -  "+v.getName());
+//                    return;
                 }
                 //Ignore otherwise
             }
@@ -345,6 +384,16 @@ public final class DownloadTaskHelper {
                                 }
                             } catch (Exception e) {
                                 e.printStackTrace();
+                                //Too many requests, return in 30 seconds
+                                synchronized (this) {
+                                    try {
+                                        this.wait(1000 * 30);
+                                        updateSingleVideo(video, dtl);
+                                    } catch(Exception E2) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                                return;
                             }
                         }
 
@@ -391,6 +440,18 @@ public final class DownloadTaskHelper {
                                 }
                             } catch (Exception e) {
                                 e.printStackTrace();
+                                if(e.getMessage().contains("429")) {
+                                    //Too many requests, return in 30 seconds
+                                    synchronized (this) {
+                                        try {
+                                            this.wait(1000 * 30);
+                                            updateSingleVideo(video, dtl);
+                                        } catch(Exception E2) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                    return;
+                                }
                             }
                         }
 
@@ -401,7 +462,7 @@ public final class DownloadTaskHelper {
                         @Override
                         public void handleMessage(Message msg) {
                             super.handleMessage(msg);
-                            Log.d(TAG, video.toString());
+                            Log.d(TAG, "Updated video info: "+video.toString());
                             if(dtl != null)
                                 dtl.onDownloadFinished();
                         }
@@ -413,19 +474,18 @@ public final class DownloadTaskHelper {
                     Process: com.jerrellmardis.amphitheatre.dev, PID: 8510
                     retrofit.RetrofitError: 429
                      */
-                    Log.e(TAG, e.getMessage());
+//                    Log.e(TAG, e.getMessage());
                     if(e.getMessage().contains("429")) {
-                        //Too many requests, return in 15 seconds
-                        try {
-                            synchronized (this) {
-                                this.wait(1000 * 15);
+                        //Too many requests, return in 30 seconds
+                        synchronized (this) {
+                            try {
+                                this.wait(1000 * 30);
                                 updateSingleVideo(video, dtl);
+                            } catch(Exception E2) {
+                                e.printStackTrace();
                             }
-                            return;
-                        } catch (InterruptedException e1) {
-                            e1.printStackTrace();
-                            return;
                         }
+                        return;
                     }
                 }
             }

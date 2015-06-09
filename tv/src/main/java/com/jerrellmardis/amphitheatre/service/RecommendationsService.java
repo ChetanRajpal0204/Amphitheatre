@@ -42,7 +42,7 @@ import java.util.Set;
 
 public class RecommendationsService extends IntentService {
 
-    private static final String TAG = "RecommendationsService";
+    private static final String TAG = "amp:RecommendationsSrv";
 
     private static final int MAX_TV_SHOWS_RECOMMENDATIONS = 2;
     private static final int MAX_MOVIE_RECOMMENDATIONS = 1;
@@ -53,6 +53,7 @@ public class RecommendationsService extends IntentService {
 
     @Override
     protected void onHandleIntent(Intent intent) {
+        Log.d(TAG, "Start recommendation service");
         RecommendationBuilder builder = new RecommendationBuilder()
                 .setContext(getApplicationContext())
                 .setSmallIcon(R.drawable.ic_tv_small);
@@ -78,6 +79,7 @@ public class RecommendationsService extends IntentService {
                 i.remove();
             }
         }
+        Log.d(TAG, "After filter, there are "+videos.size()+" left");
 
         Collections.sort(videos, new Comparator<Video>() {
             final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -108,7 +110,7 @@ public class RecommendationsService extends IntentService {
             for (Video video : videos) {
                 if (video.getMovie() != null && !TextUtils.isEmpty(video.getCardImageUrl()) &&
                         !TextUtils.isEmpty(video.getBackgroundImageUrl())) {
-
+                    Log.d(TAG, "Recommending "+video.getName());
                     builder.setBackground(video.getBackgroundImageUrl())
                             .setId(MAX_TV_SHOWS_RECOMMENDATIONS + numOfRecommendedVideos)
                             .setPriority(MAX_TV_SHOWS_RECOMMENDATIONS + numOfRecommendedVideos)

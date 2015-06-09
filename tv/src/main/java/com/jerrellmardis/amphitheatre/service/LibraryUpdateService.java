@@ -59,11 +59,36 @@ public class LibraryUpdateService extends IntentService {
         try {
             List<Source> sources = Source.listAll(Source.class);
             Log.d(TAG, "Found "+sources.size()+" sources");
+            Log.d(TAG, sources.toString());
 
             if (sources != null && !sources.isEmpty()) {
+                //Dupe check
+                String srcA = sources.get(0).getSource();
+                for(int i = 1; i<sources.size();i++) {
+//                    Log.d(TAG, "Comparing "+srcA+" with "+sources.get(i));
+                    if(sources.get(i).getSource().contains(srcA) || srcA.contains(sources.get(i).getSource())) {
+                        //Want to remove redundancies
+                        sources.get(i).delete();
+                        sources.remove(i);
+                        i--;
+                    } else {
+                        srcA = sources.get(i).getSource();
+                    }
+                }
+//                Log.d(TAG, "Stop");
+                Log.d(TAG, "Found "+sources.size()+" sources");
+                Log.d(TAG, sources.toString());
                 SecurePreferences prefs = new SecurePreferences(getApplicationContext());
                 String user = prefs.getString(Constants.PREFS_USER_KEY, "");
                 String pass = prefs.getString(Constants.PREFS_PASSWORD_KEY, "");
+
+                //Because we are using a new traversal method, we will not be using the methods below
+                for (Source source : sources) {
+                    DownloadTaskHelper.getFiles(user, pass, getPath(source));
+//                    sendBroadcast(new Intent(Constants.LIBRARY_UPDATED_ACTION));
+                }
+                if(true)
+                    return;
 
                 try {
                     Config config = ApiClient.getInstance().createTMDbClient().getConfig();
