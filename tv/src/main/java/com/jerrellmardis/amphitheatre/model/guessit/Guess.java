@@ -110,7 +110,13 @@ public class Guess {
     }
 
     public String getSeries() {
-        return series;
+        try {
+            if (series == null)
+                return "";
+            return series;
+        } catch(Exception e) {
+            return "";
+        }
     }
 
     public void setSeries(String series) {
@@ -118,6 +124,10 @@ public class Guess {
     }
 
     public String getTitle() {
+        if(getSeries() != null) {
+            if (!getSeries().isEmpty() && !getSeries().equals("0"))
+                return getSeries();
+        }
         return title;
     }
 
@@ -159,6 +169,6 @@ public class Guess {
 
     @Override
     public String toString() {
-        return "{"+title+" "+container+" "+year+" "+type+" "+format+"}";
+        return "{"+getTitle()+" ["+getSeries()+"] "+container+" "+year+" "+type+" "+format+"}";
     }
 }

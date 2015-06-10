@@ -17,8 +17,10 @@
 package com.jerrellmardis.amphitheatre.util;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ActivityNotFoundException;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -68,6 +70,28 @@ public class VideoUtils {
 
         if (activity != null) {
             final Streamer streamer = Streamer.getInstance();
+            //Make sure we get the correct video
+            final String[] vurl = {video.getVideoUrl()};
+            if(video.getVideoUrls().length > 1) {
+                AlertDialog ad = new AlertDialog.Builder(activity)
+                        .setItems(video.getVideoUrls(), new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                vurl[0] = video.getVideoUrls()[which];
+                                Log.d(TAG, "Selected video "+which+" "+ vurl[0]);
+                                //Let's hack a new video object and player
+                                Video mVideo = new Video();
+                                mVideo.setVideoUrl(vurl[0]);
+                                mVideo.setName(video.getName());
+                                playVideo(new WeakReference<Activity>(activity), mVideo);
+                            }
+                        })
+                        .setTitle("Play Which File?")
+                        .show();
+                return;
+            }
+
+            final String finalVurl = vurl[0];
             streamer.setOnStreamListener(new Streamer.OnStreamListener() {
                 @Override
                 public void onStream(int percentStreamed) {
@@ -96,7 +120,7 @@ public class VideoUtils {
             });
 
             if(video.getSource() == FileSource.SMB) {
-                Log.d("amp:VideoUtils", "Looking to play non-local video "+video.getName()+", "+video.getVideoUrl());
+                Log.d("amp:VideoUtils", "Looking to play non-local video "+video.getName()+", "+finalVurl);
                 new Thread() {
                     public void run() {
                         try {
@@ -105,15 +129,15 @@ public class VideoUtils {
                             String user = preferences.getString(Constants.PREFS_USER_KEY, "");
                             String pass = preferences.getString(Constants.PREFS_PASSWORD_KEY, "");
                             NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication("", user, pass);
-                            SmbFile file = new SmbFile(video.getVideoUrl(), auth);
+                            SmbFile file = new SmbFile(finalVurl, auth);
                             streamer.setStreamSrc(file, null);
 
                             activity.runOnUiThread(new Runnable() {
                                 public void run() {
                                     try {
-                                        Uri uri = Uri.parse(Streamer.URL + Uri.fromFile(new File(Uri.parse(video.getVideoUrl()).getPath())).getEncodedPath());
+                                        Uri uri = Uri.parse(Streamer.URL + Uri.fromFile(new File(Uri.parse(finalVurl).getPath())).getEncodedPath());
                                         Intent i = new Intent(Intent.ACTION_VIEW);
-                                        i.setDataAndType(uri, VideoUtils.getMimeType(video.getVideoUrl(), true));
+                                        i.setDataAndType(uri, VideoUtils.getMimeType(finalVurl, true));
                                         activity.startActivity(i);
                                     } catch (ActivityNotFoundException e) {
                                         e.printStackTrace();

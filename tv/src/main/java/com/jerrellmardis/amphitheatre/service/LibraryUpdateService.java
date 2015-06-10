@@ -56,6 +56,8 @@ public class LibraryUpdateService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         Log.d(TAG, "Update library");
+        if(intent.getBooleanExtra("ALARM", false))
+            return; //Stop the auto-checking for the moment as it's annoying
         try {
             List<Source> sources = Source.listAll(Source.class);
             Log.d(TAG, "Found "+sources.size()+" sources");

@@ -48,8 +48,10 @@ public class RecommendationsService extends IntentService {
     private static final int MAX_MOVIE_RECOMMENDATIONS = 1;
 
     public RecommendationsService() {
-        super("RecommendationsService");
+        super("RecommendationService");
     }
+
+    //TODO Make sure this actually runs, isn't there some intent it needs to get
 
     @Override
     protected void onHandleIntent(Intent intent) {
@@ -62,6 +64,9 @@ public class RecommendationsService extends IntentService {
         recommendTvShows(builder);
     }
 
+    //TODO Mark videos as watched
+    //TODO Set up a system that records watched videos / genre and library videos / genre,
+    //picking out the most important movies as well as the most recently added/newest release date
     private void recommendMovies(RecommendationBuilder builder) {
         List<Video> videos = Select
                 .from(Video.class)

@@ -36,6 +36,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.support.v17.leanback.app.BackgroundManager;
@@ -163,6 +165,13 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         setupUIElements();
         setupEventListeners();
         refreshLocalLibrary();
+        /*new Thread(new Runnable() {
+            @Override
+            public void run() {
+                refreshLocalLibrary();
+            }
+        }).start();*/
+
 
 
         Log.d(TAG, "Activity created, force user to load "+Video.count(Video.class, null, null)+" videos");
@@ -269,8 +278,8 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 //                Log.d(TAG, "Loading "+video.getName()+" from "+video.getVideoUrl());
                 addVideoToUi(video);
             }
-
             rebuildSubCategories();
+            //Put categories first to get a nice triage, then go into gritty file system
 
             reloadAdapters();
         } else {
@@ -366,6 +375,45 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
 //                Log.d(TAG, "Adding "+video.getVideoUrl()+" at index "+index+" to Unmatched");
                 mAdapter.add(index, new ListRow(header, listRowAdapter));
             }
+
+            //Same as below, create quick categories
+            //USB videos
+            if(video.getVideoUrl().contains("usb://")) {
+                row = findListRow("All USB Videos");
+
+                // if found add this video
+                // if not, create a new row and add it
+                if (row != null) {
+                    ((SortedObjectAdapter) row.getAdapter()).add(video);
+                } else {
+                    SortedObjectAdapter listRowAdapter = new SortedObjectAdapter(
+                            videoNameComparator, mCardPresenter);
+                    listRowAdapter.add(video);
+
+                    HeaderItem header = new HeaderItem(0, "All USB Videos", null);
+                    int index = mAdapter.size() > 1 ? 1 : 0;
+                    mAdapter.add(index, new ListRow(header, listRowAdapter));
+                }
+            }
+
+            //Local videos
+            if(video.getVideoUrl().contains("file://")) {
+                row = findListRow("All Local Videos");
+
+                // if found add this video
+                // if not, create a new row and add it
+                if (row != null) {
+                    ((SortedObjectAdapter) row.getAdapter()).add(video);
+                } else {
+                    SortedObjectAdapter listRowAdapter = new SortedObjectAdapter(
+                            videoNameComparator, mCardPresenter);
+                    listRowAdapter.add(video);
+
+                    HeaderItem header = new HeaderItem(0, "All Local Videos", null);
+                    int index = mAdapter.size() > 1 ? 1 : 0;
+                    mAdapter.add(index, new ListRow(header, listRowAdapter));
+                }
+            }
         } else if (video.isMovie()) {
             List<Source> sources = Source.listAll(Source.class);
 
@@ -388,10 +436,48 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                         listRowAdapter.add(video);
 
                         HeaderItem header = new HeaderItem(0, category, null);
-                        mAdapter.add(0, new ListRow(header, listRowAdapter));
+                        int index = mAdapter.size() > 1 ? 1 : 0;
+                        mAdapter.add(index, new ListRow(header, listRowAdapter));
                     }
 
                     break;
+                }
+            }
+            //USB videos
+            if(video.getVideoUrl().contains("usb://")) {
+                ListRow row = findListRow("All USB Videos");
+
+                // if found add this video
+                // if not, create a new row and add it
+                if (row != null) {
+                    ((SortedObjectAdapter) row.getAdapter()).add(video);
+                } else {
+                    SortedObjectAdapter listRowAdapter = new SortedObjectAdapter(
+                            videoNameComparator, mCardPresenter);
+                    listRowAdapter.add(video);
+
+                    HeaderItem header = new HeaderItem(0, "All USB Videos", null);
+                    int index = mAdapter.size() > 1 ? 1 : 0;
+                    mAdapter.add(index, new ListRow(header, listRowAdapter));
+                }
+            }
+
+            //Local videos
+            if(video.getVideoUrl().contains("file://")) {
+                ListRow row = findListRow("All Local Videos");
+
+                // if found add this video
+                // if not, create a new row and add it
+                if (row != null) {
+                    ((SortedObjectAdapter) row.getAdapter()).add(video);
+                } else {
+                    SortedObjectAdapter listRowAdapter = new SortedObjectAdapter(
+                            videoNameComparator, mCardPresenter);
+                    listRowAdapter.add(video);
+
+                    HeaderItem header = new HeaderItem(0, "All Local Videos", null);
+                    int index = mAdapter.size() > 1 ? 1 : 0;
+                    mAdapter.add(index, new ListRow(header, listRowAdapter));
                 }
             }
         } else {
@@ -427,6 +513,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 listRowAdapter.add(new VideoGroup(video));
 
                 HeaderItem header = new HeaderItem(0, getString(R.string.all_tv_shows), null);
+//                int index = mAdapter.size() > 1 ? 0 : 0;
                 mAdapter.add(0, new ListRow(header, listRowAdapter));
             }
         }
@@ -483,7 +570,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 HeaderItem header = new HeaderItem(0, getString(R.string.recently_added_tv_episodes), null);
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
                 if (unMatchedRow != null) index -= 1;
-                mAdapter.add(index, new ListRow(header, listRowAdapter));
+                mAdapter.add(0, new ListRow(header, listRowAdapter));
             }
         }
     }
@@ -501,7 +588,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 HeaderItem header = new HeaderItem(0, getString(R.string.recently_added_movies), null);
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
                 if (unMatchedRow != null) index -= 1;
-                mAdapter.add(index, new ListRow(header, listRowAdapter));
+                mAdapter.add(0, new ListRow(header, listRowAdapter));
             }
         }
     }
@@ -714,6 +801,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 } else if (item instanceof String && ((String) item).contains("Library Update Service")) {
                     Log.d(TAG, "Starting library update");
                     Intent intent = new Intent(getActivity(), LibraryUpdateService.class);
+                    intent.putExtra("ALARM", false);
                     getActivity().startService(intent);
                 } else if (item instanceof String && ((String) item).contains("Refresh")) {
                     refresh();
@@ -876,7 +964,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 DownloadTaskHelper.updateSingleVideo(localFile, new DownloadTaskHelper.DownloadTaskListener() {
                     @Override
                     public void onDownloadFinished() {
-                        refresh();
+                        refreshHandler.sendEmptyMessage(0);
                     }
                 });
                 Log.d(TAG, "There are "+Video.count(Video.class, null, null)+" video(s)");
@@ -1030,7 +1118,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 DownloadTaskHelper.updateSingleVideo(usbVideo, new DownloadTaskHelper.DownloadTaskListener() {
                     @Override
                     public void onDownloadFinished() {
-                        refresh();
+                        refreshHandler.sendEmptyMessage(0);
                     }
                 });
 //                Log.d(TAG, file.getParent().getName());
@@ -1038,7 +1126,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 Log.d(TAG,"Ignore "+file.getName());
             }
         }
-        refresh();
+        refreshHandler.sendEmptyMessage(0);
     }
 
     /*public void cacheFile(UsbFile entry) throws IOException {
@@ -1057,5 +1145,12 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         param.to = File.createTempFile(prefix, ext, f);
         new CopyTask().execute(param);
     }*/
+    Handler refreshHandler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+//            super.handleMessage(msg);
+            refresh();
+        }
+    };
 
 }

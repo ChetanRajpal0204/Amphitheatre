@@ -35,6 +35,7 @@ import com.orm.query.Select;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.text.WordUtils;
 
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -42,6 +43,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,10 +83,10 @@ public final class DownloadTaskHelper {
             traverseSmbFiles(baseDir, auth);
         } catch (MalformedURLException e) {
             e.printStackTrace();
-            Log.e(TAG, e.getMessage()+"");
+            Log.e(TAG, "MalformedURLException: "+e.getMessage());
         } catch (SmbException e) {
             e.printStackTrace();
-            Log.e(TAG, e.getMessage() + "");
+            Log.e(TAG, "SmbException: "+e.getMessage());
         }
 
 
@@ -119,18 +121,33 @@ public final class DownloadTaskHelper {
 
     public static void traverseSmbFiles(SmbFile root, NtlmPasswordAuthentication auth) throws SmbException, MalformedURLException {
         int fileCount = 0;
+        boolean video_folder = false;
+        final Video v = new Video();
+        Handler h = new Handler(Looper.getMainLooper()) {
+            @Override
+            public void handleMessage(Message msg) {
+//                            super.handleMessage(msg);
+                Video vid = (Video) msg.getData().getSerializable("VIDEO");
+                Log.d(TAG, "Handle " + msg.getData().getInt("WHEN") + " "+ vid.getName());
+                updateSingleVideo(vid, null);
+            }
+
+        };
+
+
         for(SmbFile f: root.listFiles()) {
             if(f.getParent().contains("Entertainment Media")) {
 //                Log.d(TAG, "Discovered "+f.getPath()+" "+f.isDirectory());
             }
             if(f.isDirectory()) {
                 try {
+                    //TODO Port VOB folder support to USB and internal storage
                     SmbFile[] directoryContents = f.listFiles();
 //                    Log.d(TAG, "Going into directory "+f.getPath());
                     //If this works, then we can explore
                     //Let's do some quick name checking to for time savings
                     if(f.getName().contains("Entertainment Media")) {
-                        Log.d(TAG, Arrays.asList(f.listFiles()).toString());
+//                        Log.d(TAG, Arrays.asList(f.listFiles()).toString());
                     }
                     if(!f.getName().contains("iTunes")
                             && !f.getName().contains("Digi Pix")
@@ -144,24 +161,25 @@ public final class DownloadTaskHelper {
                             && !f.getName().contains("Samsung Install Files")
                             && !f.getName().contains("AE Renders")
                             && !f.getName().contains("LocalData")
-                            && !f.getName().contains("Thrive Music Video") //TEMP
-                            && f.getPath().contains("Entertainment") //TEMP
+                            && !f.getName().contains("Documents") //TEMP
+                            /*&& !f.getName().contains("Thrive Music Video") //TEMP*/
+                            /*&& f.getPath().contains("Entertainment") //TEMP*/
                             && !f.getName().contains("Preview Files")) {
-                        Log.d(TAG, "Check "+f.getPath());
+//                        Log.d(TAG, "Check "+f.getPath());
                         traverseSmbFiles(f, auth);
                     } else {
-                        Log.d(TAG, "Don't check "+f.getPath());
+//                        Log.d(TAG, "Don't check " + f.getPath());
                     }
                 } catch(Exception e) {
                     //This folder isn't accessible
                     Log.d(TAG, "Inaccessible: "+f.getName()+" "+e.getMessage());
                     //This will save us time in the traversal
                 }
-            } else if(f.getPath().contains("LEGO")){ //TEMP
+            } else /*if(f.getPath().contains("Holly"))*/{ //TEMP
                 //Is this something we want to add?
-                Log.d(TAG, "Non-directory "+f.getPath());
+//                Log.d(TAG, "Non-directory "+f.getPath());
                 if(VideoUtils.isVideoFile(f.getPath())) {
-                    Log.d(TAG, "Is video");
+//                    Log.d(TAG, "Is video");
                     //Perhaps. Let's do some checking.
                     /* VOB check
                         If the files are in a structure like:
@@ -170,7 +188,7 @@ public final class DownloadTaskHelper {
                         Then use the movie name as the source, and each vob url will
                         be added in a comma-separated list to the video url string
                     */
-                    final Video v = new Video();
+
                     if(f.getPath().contains("VIDEO_TS")) {
                         Log.d(TAG, "Special case for "+f.getPath());
                         //We have a special case!
@@ -179,6 +197,7 @@ public final class DownloadTaskHelper {
 
                         //Let's delete this video and all like it from our video database
                         //TODO Makes more sense to not delete and replace a video, just to update in place
+//                        Log.d(TAG, "Purge where video_url like "+"%" + grandparent.getPath().replace("'", "\'") + "%");
                         List<Video> videos = Select
                                 .from(Video.class)
                                 .where(Condition.prop("video_url").like("%" + grandparent.getPath().replace("'", "\'") + "%"))
@@ -189,8 +208,9 @@ public final class DownloadTaskHelper {
                             vx.delete();
                         }
 
-                        v.setName(grandparent.getName().replace("/", "").replace("_", " ")+".mp2"); //FIXME VOB currently not supported
+                        v.setName(grandparent.getName().replace("/", "").replace("_", " ")+".avi"); //FIXME VOB currently not supported
                         v.setSource(FileSource.SMB);
+                        v.setIsMatched(true); //Kind of a lie, but we know it's a thing!
                         //Get all the video files
                         ArrayList<String> urls = new ArrayList<>();
                         for(SmbFile f2: grandparent.listFiles()) {
@@ -201,8 +221,9 @@ public final class DownloadTaskHelper {
                                 }
                             }
                         }
+//                        Log.d(TAG, urls.toString()); //This works well
                         v.setVideoUrl(urls);
-                        Log.d(TAG, "Retrieved info for VOB "+v.toString());
+                        video_folder = true;
                     } else {
                         //Add the video like normal
                         //Let's delete this video and all like it from our video database
@@ -219,27 +240,43 @@ public final class DownloadTaskHelper {
                         v.setName(f.getName());
                         v.setSource(FileSource.SMB);
                         v.setVideoUrl(f.getPath());
+
+                        fileCount++;
+                        //Send a request to update metadata every second, to prevent as many 429 errors and memory exceptions
+                        Message m = new Message();
+                        Bundle mBundle = new Bundle();
+                        mBundle.putSerializable("VIDEO", v.clone());
+                        mBundle.putInt("WHEN", (int) (1000*fileCount+Math.round(Math.random()*100)));
+                        m.setData(mBundle);
+//                        h.sendEmptyMessageDelayed(1000 * fileCount, 1000 * fileCount);
+                        h.sendMessageDelayed(m, 1000 * fileCount);
+                        Log.d(TAG, "Queued " + mBundle.getInt("WHEN") + "  -  " + v.getName());
+                        v.save(); //Need to save here, otherwise purging won't work as expected
                     }
 
 //                    Log.d(TAG, v.toString());
-                    fileCount++;
-                    Handler h = new Handler(Looper.getMainLooper()) {
-                        @Override
-                        public void handleMessage(Message msg) {
-//                            super.handleMessage(msg);
-                            Log.d(TAG, "Handle "+msg.what);
-                            v.save();
-                            updateSingleVideo(v, null);
-                        }
 
-                    };
-                    //Send a request to update metadata every second, to prevent as many 429 errors and memory exceptions
-                    h.sendEmptyMessageDelayed(1000*fileCount, 1000*fileCount);
-                    Log.d(TAG, "Queued " + 1000 * fileCount + "  -  "+v.getName());
+
+
 //                    return;
                 }
                 //Ignore otherwise
             }
+        }
+        //Let's do VOB video
+        if(video_folder) {
+//            Log.d(TAG, "Done rooting through "+root.getPath());
+            Log.d(TAG, "Created info for VOB " + v.toString());
+            fileCount++;
+            //Send a request to update metadata every second, to prevent as many 429 errors and memory exceptions
+            Message m = new Message();
+            Bundle mBundle = new Bundle();
+            mBundle.putSerializable("VIDEO", v.clone());
+            m.setData(mBundle);
+//                        h.sendEmptyMessageDelayed(1000 * fileCount, 1000 * fileCount);
+            h.sendMessageDelayed(m, 1000 * fileCount);
+            Log.d(TAG, "Queued " + 1000 * fileCount + "  -  " + v.getName());
+            v.save(); //Need to save here, otherwise purging won't work as expected
         }
     }
 
@@ -251,16 +288,19 @@ public final class DownloadTaskHelper {
      */
     public static void updateSingleVideo(final Video video, final DownloadTaskListener dtl) {
         //TODO Do a check for video's parent and if it is a nameless VOB, use the parent instead
+        final Video original = video.clone();
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
+                    Log.d(TAG, "Run video update");
                     Config config = ApiClient.getInstance().createTMDbClient().getConfig();
                     if (TextUtils.isEmpty(video.getVideoUrl()) || video.getName().toLowerCase().contains(Constants.SAMPLE)) {
                         return;
                     }
-
+                    Log.d(TAG, "Sending guess for "+video.getName());
                     Guess guess = GuessItClient.guess(video.getName());
+                    Log.d(TAG, "Guess returns "+guess.toString());
 
                     if(guess == null) {
                         Log.d(TAG, "There's nothing here for me");
@@ -276,7 +316,9 @@ public final class DownloadTaskHelper {
 
                         int indexOf = video.getVideoUrl().lastIndexOf(".");
                         String ext = video.getVideoUrl().substring(indexOf, video.getVideoUrl().length());
-                        guess = GuessItClient.guess(name + ext);
+                        //NO We're NOT going to be doing that.
+//                        Log.d(TAG, "Guess not found, use parent directory name: "+name+ext);
+//                        guess = GuessItClient.guess(name + ext);
 //                    Log.d(TAG, guess.toString());
                     }
 
@@ -284,7 +326,7 @@ public final class DownloadTaskHelper {
                     Log.d(TAG, video.getName()+" => "+guess.toString());
 
                     //Don't update video and ragequit
-                    if (guess == null || TextUtils.isEmpty(guess.getTitle())) {
+                    if (guess == null || (TextUtils.isEmpty(guess.getTitle()) && TextUtils.isEmpty(guess.getSeries()))) {
                         Log.d(TAG, "There's nothing here for me");
                         return;
                     }
@@ -373,6 +415,7 @@ public final class DownloadTaskHelper {
                                     video.setName(tvShow.getOriginalName());
                                     video.setOverview(tvShow.getOverview());
                                     video.setTvShow(tvShow);
+                                    video.setIsMatched(true);
 
                                     String cardImageUrl = config.getImages().getBase_url() + "original" +
                                             tvShow.getPosterPath();
@@ -383,17 +426,24 @@ public final class DownloadTaskHelper {
                                     video.setBackgroundImageUrl(bgImageUrl);
                                 }
                             } catch (Exception e) {
-                                e.printStackTrace();
                                 //Too many requests, return in 30 seconds
-                                synchronized (this) {
-                                    try {
-                                        this.wait(1000 * 30);
-                                        updateSingleVideo(video, dtl);
-                                    } catch(Exception E2) {
-                                        e.printStackTrace();
+                                if(e.getMessage().contains("429")) {
+                                    //Too many requests, return in 15+x seconds
+                                    synchronized (this) {
+                                        try {
+                                            long wait = 1000 * 15 + Math.round(15000*Math.random());
+                                            Log.d(TAG, "Delay "+original.getName()+" by "+wait+"s");
+                                            this.wait(wait);
+                                            updateSingleVideo(original, dtl);
+                                        } catch(Exception E2) {
+                                            e.printStackTrace();
+                                        }
                                     }
+                                } else {
+                                    Log.e(TAG, e.getMessage()+"");
+                                    e.printStackTrace();
                                 }
-                                return;
+//                                return;
                             }
                         }
 
@@ -439,19 +489,24 @@ public final class DownloadTaskHelper {
                                     video.setBackgroundImageUrl(bgImageUrl);
                                 }
                             } catch (Exception e) {
-                                e.printStackTrace();
+
                                 if(e.getMessage().contains("429")) {
-                                    //Too many requests, return in 30 seconds
+                                    //Too many requests, return in 15+x seconds
                                     synchronized (this) {
                                         try {
-                                            this.wait(1000 * 30);
-                                            updateSingleVideo(video, dtl);
+                                            long wait = 1000 * 15 + Math.round(15000*Math.random());
+                                            Log.d(TAG, "Delay "+original.getName()+" by "+wait+"s");
+                                            this.wait(wait);
+                                            updateSingleVideo(original, dtl);
                                         } catch(Exception E2) {
                                             e.printStackTrace();
                                         }
                                     }
-                                    return;
+                                } else {
+                                    Log.e(TAG, e.getMessage()+"");
+                                    e.printStackTrace();
                                 }
+//                                return;
                             }
                         }
 
@@ -479,14 +534,18 @@ public final class DownloadTaskHelper {
                         //Too many requests, return in 30 seconds
                         synchronized (this) {
                             try {
-                                this.wait(1000 * 30);
-                                updateSingleVideo(video, dtl);
+                                long wait = 1000 * 15 + Math.round(15000*Math.random());
+                                Log.d(TAG, "Delay "+original.getName()+" by "+wait+"s");
+                                this.wait(wait);
+                                updateSingleVideo(original, dtl);
                             } catch(Exception E2) {
                                 e.printStackTrace();
                             }
                         }
-                        return;
+                    } else {
+                        Log.e(TAG, "Ran into error "+e.getMessage());
                     }
+//                    return;
                 }
             }
         }).start();

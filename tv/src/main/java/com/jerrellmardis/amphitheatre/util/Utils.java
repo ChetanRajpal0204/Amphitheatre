@@ -38,6 +38,7 @@ import com.github.mjdev.libaums.fs.UsbFile;
 import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.model.SuperFile;
 import com.jerrellmardis.amphitheatre.service.LibraryUpdateService;
+import com.jerrellmardis.amphitheatre.service.RecommendationsService;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -155,12 +156,13 @@ public final class Utils {
     }
 
     public static void scheduleLibraryUpdateService(Context context) {
-        Log.d("amp:Utils", "Checking if alarm is already set: "+isAlarmAlreadySet(context));
+        Log.d("amp:Utils", "Checking if alarm is already set: "+isAlarmAlreadySet(context, LibraryUpdateService.class));
         //And now
         Log.d("amp:Utils", "Start rechecking the library");
         Intent intent = new Intent(context, LibraryUpdateService.class);
+        intent.putExtra("ALARM", true);
         /*context.startService(intent);*/
-        if (isAlarmAlreadySet(context)) return;
+        if (isAlarmAlreadySet(context, LibraryUpdateService.class)) return;
 
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         //Intent intent = ...
@@ -169,13 +171,33 @@ public final class Utils {
 
         alarmManager.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 AlarmManager.INTERVAL_HALF_HOUR,
-                AlarmManager.INTERVAL_HALF_HOUR,
+                AlarmManager.INTERVAL_HOUR*3, //Every three hours seems sufficient
+                alarmIntent);
+
+    }
+    public static void scheduleRecommendations(Context context) {
+        Log.d("amp:Utils", "Checking if alarm is already set: "+isAlarmAlreadySet(context, RecommendationsService.class));
+        //And now
+        Log.d("amp:Utils", "Start rechecking the recommendations");
+        Intent intent = new Intent(context, RecommendationsService.class);
+        intent.putExtra("ALARM", true);
+        /*context.startService(intent);*/
+        if (isAlarmAlreadySet(context, RecommendationsService.class)) return;
+
+        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        //Intent intent = ...
+        PendingIntent alarmIntent = PendingIntent.getService(context, LIBRARY_UPDATE_REQUEST_CODE,
+                intent, 0);
+
+        alarmManager.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                5000,
+                AlarmManager.INTERVAL_HALF_HOUR, //Every half hour seems sufficient
                 alarmIntent);
 
     }
 
-    private static boolean isAlarmAlreadySet(Context context) {
-        Intent intent = new Intent(context, LibraryUpdateService.class);
+    private static boolean isAlarmAlreadySet(Context context, Class c) {
+        Intent intent = new Intent(context, c);
         PendingIntent pi = PendingIntent.getService(context, LIBRARY_UPDATE_REQUEST_CODE,
                 intent, PendingIntent.FLAG_NO_CREATE);
         return pi != null;

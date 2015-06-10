@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -100,7 +101,7 @@ public class Video extends SugarRecord<Video> implements Serializable {
         else if(videoUrl.contains("smb://"))
             this.source = FileSource.SMB;
     }
-    public void setVideoUrl(ArrayList<String> urls) {
+    public void setVideoUrl(List<String> urls) {
         String list = "";
         Iterator<String> iterator = urls.iterator();
         while(iterator.hasNext()) {
@@ -183,7 +184,7 @@ public class Video extends SugarRecord<Video> implements Serializable {
 //        String out = ((isLocalFile())?"LOCAL ":"NOT LOCAL ");
         String out = source.name()+" ";
         out += ((isMovie())?"MOVIE":"TV SHOW");
-        return out + "   created "+getCreated()+" named "+getName()+" at "+getVideoUrl()+";  " + getOverview();
+        return out + "   created "+getCreated()+" named "+getName()+" at "+getVideoUrl()+" [x"+getVideoUrls().length+"];  " + getOverview();
     }
 
     public boolean isLocalFile() {
@@ -270,4 +271,23 @@ public class Video extends SugarRecord<Video> implements Serializable {
 /*    public void setFile(SuperFile file) {
         this.file = file;
     }*/
+    //Creates a new version of this video so it can be passed around indirectly for threading
+    public Video clone() {
+        Video clone = new Video();
+        clone.setName(getName());
+        clone.setVideoUrl(Arrays.asList(getVideoUrls()));
+        clone.setIsMovie(isMovie());
+        clone.setCreated(getCreated());
+        clone.setSource(getSource());
+        clone.setBackgroundImageUrl(getBackgroundImageUrl());
+        clone.setCardImageUrl(getCardImageUrl());
+        clone.setIsLocalFile(isLocalFile());
+        clone.setMovie(getMovie());
+        clone.setIsMatched(isMatched());
+        clone.setOverview(getOverview());
+        clone.setTvShow(getTvShow());
+        clone.setWatched(isWatched());
+
+        return clone;
+    }
 }

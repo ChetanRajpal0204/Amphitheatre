@@ -19,6 +19,8 @@ package com.jerrellmardis.amphitheatre.activity;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.Toast;
 
 import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.util.Utils;
@@ -28,8 +30,23 @@ public class BrowseActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Toast.makeText(this, "Loading Videos...", Toast.LENGTH_SHORT).show();
+        View v = new View(this);
+        v.setBackgroundColor(getResources().getColor(R.color.background_material_dark));
+        setContentView(v);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
         setContentView(R.layout.activity_browse);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
         Log.d("amp:BrowseActivity", "Created activity, schedule library update");
         Utils.scheduleLibraryUpdateService(this);
+        Utils.scheduleRecommendations(this);
     }
 }
