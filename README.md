@@ -6,9 +6,10 @@ Amphitheatre is an Android TV project aimed to bring you the best of your conten
 ![Amphitheatre](images/palette_expanding_info_panel.png)
 
 **Features**
-* Indexes movie and TV show files on your SMB or CIFS shares.
+* Indexes movie and TV show files on your SMB, CIFS shares, on a USB hard drive, or stored on the device.
 * View movie and TV show poster art and details.
-* Quickly search through your video collection.
+* Quickly search through your video collection in the app or globally.
+* Recommends users new movies and TV shows to watch.
 
 Dependencies
 ------------
@@ -29,7 +30,7 @@ TVDB_API_KEY=<your api key>
 
 #### Media Player
 
-Amphitheatre does not play the actual video file but serves it to a capable media player application. So you'll need to install a media player as well. MXPlayer is a great player worth checking out.
+Amphitheatre does not play the actual video file but serves it to a capable media player application. So you'll need to install a media player as well. MXPlayer and VLC player are great players worth checking out.
 
 Contributing
 ------------
@@ -39,7 +40,7 @@ All contributions are welcome!
 License
 -------
 
-    Copyright 2014 Jerrell Mardis
+    Copyright 2014 Jerrell Mardis, with modifications by Nick Felker
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
