@@ -31,20 +31,10 @@ public class BrowseActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Toast.makeText(this, "Loading Videos...", Toast.LENGTH_SHORT).show();
-        View v = new View(this);
+        /*View v = new View(this);
         v.setBackgroundColor(getResources().getColor(R.color.background_material_dark));
-        setContentView(v);
-    }
-
-    @Override
-    public void onStart() {
-        super.onStart();
+        setContentView(v);*/
         setContentView(R.layout.activity_browse);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
         Log.d("amp:BrowseActivity", "Created activity, schedule library update");
         Utils.scheduleLibraryUpdateService(this);
         Utils.scheduleRecommendations(this);

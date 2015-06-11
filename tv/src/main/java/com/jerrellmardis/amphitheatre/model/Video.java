@@ -24,6 +24,7 @@ import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.text.format.DateFormat;
 import android.util.Log;
 
 import com.github.mjdev.libaums.UsbMassStorageDevice;
@@ -39,6 +40,7 @@ import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -59,9 +61,10 @@ public class Video extends SugarRecord<Video> implements Serializable {
     private boolean isMatched;
     private boolean isMovie;
     private boolean isWatched;
+    private long duration;
     //TODO thumbnail generation
     private FileSource source;
-    //private boolean hidden
+    private boolean hidden;
 //    private SuperFile file;
 
     public String getName() {
@@ -184,7 +187,7 @@ public class Video extends SugarRecord<Video> implements Serializable {
 //        String out = ((isLocalFile())?"LOCAL ":"NOT LOCAL ");
         String out = source.name()+" ";
         out += ((isMovie())?"MOVIE":"TV SHOW");
-        return out + "   created "+getCreated()+" named "+getName()+" at "+getVideoUrl()+" [x"+getVideoUrls().length+"];  " + getOverview();
+        return out + "   created "+getCreated()+" named "+getName()+"["+getProductionYear()+"] at "+getVideoUrl()+" [x"+getVideoUrls().length+"];  " + getOverview();
     }
 
     public boolean isLocalFile() {
@@ -287,7 +290,44 @@ public class Video extends SugarRecord<Video> implements Serializable {
         clone.setOverview(getOverview());
         clone.setTvShow(getTvShow());
         clone.setWatched(isWatched());
+        clone.setDuration(getDuration());
+        clone.setHidden(isHidden());
 
         return clone;
+    }
+
+    public long getDuration() {
+        return duration;
+    }
+
+    public void setDuration(long duration) {
+        this.duration = duration;
+    }
+
+    public boolean isHidden() {
+        return hidden;
+    }
+
+    public void setHidden(boolean hidden) {
+        this.hidden = hidden;
+    }
+
+    public int getProductionYear() {
+        if(tvShow != null) {
+//            Date prod = new Date(Date.parse(tvShow.getEpisode().getAirDate()));
+//            Log.d("amp:Video", Date.parse(tvShow.getEpisode().getAirDate())+" to "+prod.getYear());
+//            return prod.getYear();
+            return Integer.parseInt(tvShow.getEpisode().getAirDate().substring(0,4));
+        } else if(movie != null) {
+//            Date prod = new Date(Date.parse(movie.getReleaseDate()));
+//            Log.d("amp:Video", Date.parse(movie.getReleaseDate())+" to "+prod.getYear());
+//            return prod.getYear();
+            return Integer.parseInt(movie.getReleaseDate().substring(0,4));
+        }
+        return 2015;
+    }
+
+    public Serializable getSerializedVideo() {
+        return this;
     }
 }

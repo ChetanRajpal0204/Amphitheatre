@@ -16,7 +16,9 @@
 
 package com.jerrellmardis.amphitheatre.fragment;
 
+import android.app.SearchManager;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.v17.leanback.app.BackgroundManager;
 import android.support.v17.leanback.app.DetailsFragment;
@@ -25,12 +27,15 @@ import android.support.v17.leanback.widget.OnItemClickedListener;
 import android.support.v17.leanback.widget.Row;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
+import android.util.Log;
 
 import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.activity.DetailsActivity;
 import com.jerrellmardis.amphitheatre.listeners.RowBuilderTaskListener;
+import com.jerrellmardis.amphitheatre.model.Source;
 import com.jerrellmardis.amphitheatre.model.Video;
 import com.jerrellmardis.amphitheatre.model.VideoGroup;
+import com.jerrellmardis.amphitheatre.provider.VideosProvider;
 import com.jerrellmardis.amphitheatre.task.DetailRowBuilderTask;
 import com.jerrellmardis.amphitheatre.util.BlurTransform;
 import com.jerrellmardis.amphitheatre.util.Constants;
@@ -56,6 +61,8 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
     private Transformation mBlurTransformation;
     private Target mBackgroundTarget;
     private DisplayMetrics mMetrics;
+    private String TAG = "amp:VideoDetailsFrag";
+    private Video mVideo;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -71,34 +78,88 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
         getActivity().getWindowManager().getDefaultDisplay().getMetrics(mMetrics);
 
         boolean isVideo = getActivity().getIntent().getBooleanExtra(Constants.IS_VIDEO, true);
-        Video video;
-
-        if (isVideo) {
-            video = (Video) getActivity().getIntent().getSerializableExtra(Constants.VIDEO);
-
-            if (video.getTvShow() != null && video.getTvShow().getEpisode() != null) {
-                updateBackground(video.getTvShow().getEpisode().getStillPath());
-            } else {
-                updateBackground(video.getBackgroundImageUrl());
+        Log.d(TAG, "VideoDetailsFragment");
+        try {
+            if(searchGlobalSearchIntent()) {
+                isVideo = true;
             }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        /*try {
+            Log.d(TAG, searchGlobalSearchIntent()+"");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }*/
+        if (isVideo) {
+            mVideo = (Video) getActivity().getIntent().getSerializableExtra(Constants.VIDEO);
 
+            /*if(mVideo == null) {
+                //Get via id
+                int id = getActivity().getIntent().getIntExtra(SearchManager.SUGGEST_COLUMN_INTENT_DATA_ID, -1);
+                Log.d(TAG, id+"");
+                mVideo = Select.from(Video.class).where(Condition.prop("id").eq(id)).list().get(0);
+            }*/
+
+            /*if(mVideo.isMovie())
+            if (mVideo.getTvShow() != null && mVideo.getTvShow().getEpisode() != null) {
+
+            } else {
+
+            }
+*/
             Map<String, List<Video>> relatedVideos = Collections.emptyMap();
 
-            if (video.isMovie()) {
-                relatedVideos = getRelatedMovies(video);
-            } else if (video.getTvShow() != null && video.getTvShow().getEpisode() != null) {
-                relatedVideos = getRelatedTvShows(video);
+            if (mVideo.isMovie()) {
+                relatedVideos = getRelatedMovies(mVideo);
+                updateBackground(mVideo.getBackgroundImageUrl());
+                Log.d(TAG, mVideo.getBackgroundImageUrl());
+            } else if (mVideo.getTvShow() != null && mVideo.getTvShow().getEpisode() != null) {
+                relatedVideos = getRelatedTvShows(mVideo);
+                updateBackground(mVideo.getTvShow().getEpisode().getStillPath());
+                Log.d(TAG, mVideo.getTvShow().getEpisode().getStillPath());
             }
 
-            new DetailRowBuilderTask(getActivity(), relatedVideos, true, this).execute(video);
+            new DetailRowBuilderTask(getActivity(), relatedVideos, true, this).execute(mVideo);
         } else {
             VideoGroup videoGroup = (VideoGroup) getActivity().getIntent().getSerializableExtra(Constants.VIDEO_GROUP);
-            video = videoGroup.getVideo();
-            updateBackground(video.getBackgroundImageUrl());
-            new DetailRowBuilderTask(getActivity(), getRelatedTvShows(video), false, this).execute(video);
+            mVideo = videoGroup.getVideo();
+            updateBackground(mVideo.getBackgroundImageUrl());
+            new DetailRowBuilderTask(getActivity(), getRelatedTvShows(mVideo), false, this).execute(mVideo);
         }
 
         setOnItemClickedListener(getDefaultItemClickedListener());
+    }
+
+    /*
+     * Check if there is a global search intent
+     */
+    private boolean searchGlobalSearchIntent() throws Exception {
+        Intent intent = getActivity().getIntent();
+        String intentAction = intent.getAction();
+        String globalSearch = getString(R.string.global_search);
+        if (globalSearch.equalsIgnoreCase(intentAction)) {
+            Uri intentData = intent.getData();
+            Log.d(TAG, "action: " + intentAction + " intentData:" + intentData);
+            int selectedIndex = Integer.parseInt(intentData.getLastPathSegment());
+//            String selectedIndex = intentData.getLastPathSegment();
+            List<Video> movies = Source.listAll(Video.class);
+            int movieIndex = 0;
+            if (movies == null) {
+                return false;
+            }
+            for (Video movie : movies) {
+                Log.d(TAG, selectedIndex+" => "+movieIndex+" "+movie.getName());
+                movieIndex++;
+//                if (selectedIndex.equals(movie.getVideoUrl())) {
+                if (selectedIndex == movieIndex) {
+                    mVideo = movie;
+                    Log.d(TAG, movie.toString());
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     protected OnItemClickedListener getDefaultItemClickedListener() {

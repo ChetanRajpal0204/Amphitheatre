@@ -165,10 +165,10 @@ public final class DownloadTaskHelper {
                             /*&& !f.getName().contains("Thrive Music Video") //TEMP*/
                             /*&& f.getPath().contains("Entertainment") //TEMP*/
                             && !f.getName().contains("Preview Files")) {
-//                        Log.d(TAG, "Check "+f.getPath());
+                        Log.d(TAG, "Check "+f.getPath());
                         traverseSmbFiles(f, auth);
                     } else {
-//                        Log.d(TAG, "Don't check " + f.getPath());
+                        Log.d(TAG, "Don't check " + f.getPath());
                     }
                 } catch(Exception e) {
                     //This folder isn't accessible
@@ -179,7 +179,7 @@ public final class DownloadTaskHelper {
                 //Is this something we want to add?
 //                Log.d(TAG, "Non-directory "+f.getPath());
                 if(VideoUtils.isVideoFile(f.getPath())) {
-//                    Log.d(TAG, "Is video");
+                    Log.d(TAG, f.getName() + " is a video");
                     //Perhaps. Let's do some checking.
                     /* VOB check
                         If the files are in a structure like:
@@ -416,6 +416,7 @@ public final class DownloadTaskHelper {
                                     video.setOverview(tvShow.getOverview());
                                     video.setTvShow(tvShow);
                                     video.setIsMatched(true);
+                                    video.setDuration(30*60*1000);
 
                                     String cardImageUrl = config.getImages().getBase_url() + "original" +
                                             tvShow.getPosterPath();
@@ -478,6 +479,7 @@ public final class DownloadTaskHelper {
                                         video.setName(movie.getTitle());
                                         video.setIsMatched(true);
                                         video.setMovie(movie);
+                                        video.setDuration(movie.getRuntime());
                                     }
 
                                     String cardImageUrl = config.getImages().getBase_url() + "original" +

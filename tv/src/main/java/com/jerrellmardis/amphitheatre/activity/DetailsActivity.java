@@ -17,15 +17,25 @@
 package com.jerrellmardis.amphitheatre.activity;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 
 import com.jerrellmardis.amphitheatre.R;
 
 public class DetailsActivity extends Activity {
+    private static String TAG = "amp:DetailsActivity";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_details);
+    }
+
+    @Override
+    public boolean onSearchRequested() {
+        Log.d(TAG, "Search requested");
+        startActivity(new Intent(this, SearchActivity.class));
+        return true;
     }
 }
