@@ -41,6 +41,11 @@ The format to do so is as follows:
 
 Note this currently only works for SMB shares.
 
+#### Ignored Folders
+When scanning SMB shares, there are a few folder names that will not be checked. If you have a video in this folder that you want to be presented, you should move it to another folder or file an issue to enable it.
+
+Among the few folder names is `Ignore` or any folder that starts with a `.`. If you want to hide files from being scanned, you should put them into one of these folders.
+
 Contributing
 ------------
 
