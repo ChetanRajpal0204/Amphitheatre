@@ -32,6 +32,15 @@ TVDB_API_KEY=<your api key>
 
 Amphitheatre does not play the actual video file but serves it to a capable media player application. So you'll need to install a media player as well. MXPlayer and VLC player are great players worth checking out.
 
+#### Video Groups
+Pehaps you have a movie that is in a few parts. This is easy to manage. You can create a "title shared" folder that allows you to store a group of videos under the same name. You can select the video you want to play in the details activity.
+
+The format to do so is as follows:
+`MOVIE NAME/VIDEO_TS/movie_part1.avi`
+`MOVIE NAME/VIDEO_TS/movie_part2.avi`
+
+Note this currently only works for SMB shares.
+
 Contributing
 ------------
 
