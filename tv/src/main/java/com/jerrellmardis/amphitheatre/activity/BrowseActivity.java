@@ -30,6 +30,7 @@ public class BrowseActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d("amp:BrowseActivity", "Loading app");
         Toast.makeText(this, "Loading Videos...", Toast.LENGTH_SHORT).show();
         /*View v = new View(this);
         v.setBackgroundColor(getResources().getColor(R.color.background_material_dark));

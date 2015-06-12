@@ -8,13 +8,20 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.graphics.Bitmap;
+import android.net.Uri;
+import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.provider.BaseColumns;
 import android.util.Log;
+import android.widget.ImageView;
 
 import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.provider.PaginatedCursor;
 import com.jerrellmardis.amphitheatre.util.VideoUtils;
+import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 
 import org.json.JSONException;
@@ -51,15 +58,32 @@ public class VideoDatabase {
     private static final String TAG = "amp:VideoDatabase";
     private static final String DATABASE_NAME = "video_database_leanback";
     private static final String FTS_VIRTUAL_TABLE = "Leanback_table";
-    private static final int DATABASE_VERSION = 7;
+    private static final int DATABASE_VERSION = 8;
     private static final HashMap<String, String> COLUMN_MAP = buildColumnMap();
     private static int CARD_WIDTH = 313;
     private static int CARD_HEIGHT = 176;
     private final VideoDatabaseOpenHelper mDatabaseOpenHelper;
+    public static String[] columns = new String[]{
+        BaseColumns._ID,
+        VideoDatabase.KEY_NAME,
+        VideoDatabase.KEY_DESCRIPTION,
+        VideoDatabase.KEY_DATA_TYPE,
+        VideoDatabase.KEY_PRODUCTION_YEAR,
+        VideoDatabase.KEY_ACTION,
+        VideoDatabase.KEY_INTENT_DATA_ID,
+        VideoDatabase.KEY_INTENT_DATA,
+        VideoDatabase.KEY_INTENT_EXTRA,
+        VideoDatabase.KEY_DURATION,
+        VideoDatabase.KEY_ICON,
+        VideoDatabase.KEY_PURCHASE_PRICE,
+        VideoDatabase.KEY_IS_LIVE,
+        SearchManager.SUGGEST_COLUMN_INTENT_DATA_ID
+    };
 
     public VideoDatabase(Context mContext) {
         mDatabaseOpenHelper = new VideoDatabaseOpenHelper(mContext);
         context = mContext;
+//        mDatabaseOpenHelper.loadDatabase();
     }
 
     private static HashMap buildColumnMap() {
@@ -135,7 +159,7 @@ public class VideoDatabase {
         builder.setTables(FTS_VIRTUAL_TABLE);
         builder.setProjectionMap(COLUMN_MAP);
 
-//        mDatabaseOpenHelper.loadDatabase();
+        mDatabaseOpenHelper.loadDatabase();
 
         Log.d(TAG, "Querying v" + mDatabaseOpenHelper.getReadableDatabase().getVersion());
         Log.d(TAG, selection+"; "+ Arrays.asList(selectionArgs).toString()+"; "+ Arrays.asList(columns).toString());
@@ -151,6 +175,20 @@ public class VideoDatabase {
             return null;
         }
         return cursor;
+    }
+
+    public String getUri(int id) {
+        SQLiteQueryBuilder builder = new SQLiteQueryBuilder();
+        builder.setTables(FTS_VIRTUAL_TABLE);
+        builder.setProjectionMap(COLUMN_MAP);
+        String selection = KEY_INTENT_DATA_ID + " MATCH ?";
+        String[] selectionArgs = new String[]{id+""};
+
+//        mDatabaseOpenHelper.loadDatabase();
+        Cursor userQuery = builder.query(mDatabaseOpenHelper.getReadableDatabase(),
+                columns, selection, selectionArgs, null, null, null);
+        userQuery.moveToFirst();
+        return userQuery.getColumnName(userQuery.getColumnIndex(KEY_INTENT_DATA));
     }
 
 
@@ -265,49 +303,89 @@ public class VideoDatabase {
          *
          * @return rowId or -1 if failed
          */
-        public long addMovie(Video movie) {
+        public long addMovie(final Video movie) {
+//            Log.d(TAG, "Adding movie to db "+movie.getName());
+            if(!movie.isMatched())
+                return -1; //Don't bother adding
             if(mDatabase == null)
                 mDatabase = getWritableDatabase();
-            ContentValues initialValues = new ContentValues();
+            final ContentValues initialValues = new ContentValues();
             initialValues.put(KEY_NAME, movie.getName());
             initialValues.put(KEY_DESCRIPTION, movie.getOverview());
             initialValues.put(KEY_DATA_TYPE, VideoUtils.getMimeType(movie.getName(), true)); //TODO Use VideoUtils
             initialValues.put(KEY_PRODUCTION_YEAR, movie.getProductionYear());
             //Now bitmap to file
-            Bitmap icon = null;
-            try {
-                icon = Picasso.with(mHelperContext).load(movie.getCardImageUrl()).get();
-                FileOutputStream out = null;
-                String path = Environment.getExternalStorageDirectory().toString();
-                File file = new File(path, ".amphitheatre"+movie.getName()+".png"); // the File to save to
-                try {
-                    out = new FileOutputStream(file);
-                    icon.compress(Bitmap.CompressFormat.PNG, 100, out); // bmp is your Bitmap instance
-                    // PNG is a lossless format, the compression factor (100) is ignored
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    initialValues.put(KEY_ICON, movie.getCardImageUrl());
-                } finally {
-                    try {
-                        if (out != null) {
-                            out.close();
-                            initialValues.put(KEY_ICON, file.getAbsolutePath());
-                            Log.d(TAG, "Posting "+file.getAbsolutePath());
+            final ImageView imager = new ImageView(mHelperContext);
+            //Do this on the main thread
+            initialValues.put(KEY_ICON, movie.getCardImageUrl());
+            Handler downloadImage = new Handler(Looper.getMainLooper()) {
+                @Override
+                public void handleMessage(Message msg) {
+                    final Video movie = (Video) msg.getData().getSerializable("VIDEO");
+                    if(movie == null)
+                        return;
+                    if(movie.getCardImageUrl() != null) {
+                        if (movie.getCardImageUrl().contains("storage")) {
+                            //Is already local
+                            return;
                         }
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        initialValues.put(KEY_ICON, movie.getCardImageUrl());
                     }
+                    if(!movie.isMatched())
+                        return;
+                    Log.d(TAG, "Download image");
+//                    super.handleMessage(msg);
+                    Picasso.with(mHelperContext).load(movie.getCardImageUrl()).into(imager, new com.squareup.picasso.Callback() {
+                        @Override
+                        public void onSuccess() {
+                            Log.d(TAG, "New image in the .ampitheatre");
+                            Bitmap icon = imager.getDrawingCache();
+                            FileOutputStream out = null;
+                            String path = Environment.getExternalStorageDirectory().toString();
+                            final File dir = new File(path, ".amphitheatre");
+                            dir.mkdirs(); //create folders where write files
+                            File file = new File(path, ".amphitheatre/" + movie.getName().replaceAll(" ", "_").replaceAll("'", "") + ".png"); // the File to save to
+                            try {
+                                out = new FileOutputStream(file);
+                                icon.compress(Bitmap.CompressFormat.PNG, 100, out); // bmp is your Bitmap instance
+                                // PNG is a lossless format, the compression factor (100) is ignored
+                                movie.setCardImageUrl(file.getAbsolutePath());
+                                movie.save();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                initialValues.put(KEY_ICON, movie.getCardImageUrl());
+                            } finally {
+                                try {
+                                    if (out != null) {
+                                        out.close();
+                                        initialValues.put(KEY_ICON, file.getAbsolutePath());
+                                        Log.d(TAG, "Posting " + file.getAbsolutePath());
+                                    }
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                    initialValues.put(KEY_ICON, movie.getCardImageUrl());
+                                }
+                            }
+                        }
+
+                        @Override
+                        public void onError() {
+                            //Error occurred, don't save empty files
+                            Log.d(TAG, "Download error occurs");
+                            initialValues.put(KEY_ICON, movie.getCardImageUrl());
+                        }
+                    });
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
-                initialValues.put(KEY_ICON, movie.getCardImageUrl());
-            }
+            };
+            Message m = new Message();
+            Bundle mBundle = new Bundle();
+            mBundle.putSerializable("VIDEO", movie.clone());
+            m.setData(mBundle);
+//            downloadImage.sendMessage(m);
             initialValues.put(KEY_IS_LIVE, false);
             initialValues.put(KEY_PURCHASE_PRICE, "FREE");
             initialValues.put(KEY_DURATION, movie.getDuration());
-            initialValues.put(KEY_INTENT_EXTRA, movie.getVideoUrl());
-            initialValues.put(KEY_INTENT_DATA_ID,  movie.getVideoUrl());
+            initialValues.put(KEY_INTENT_EXTRA, movie.getId());
+            initialValues.put(KEY_INTENT_DATA_ID,  movie.getId());
             initialValues.put(KEY_INTENT_DATA, movie.getVideoUrl());
             initialValues.put(KEY_ACTION, mHelperContext.getString(R.string.global_search));
             return mDatabase.insert(FTS_VIRTUAL_TABLE, null, initialValues);

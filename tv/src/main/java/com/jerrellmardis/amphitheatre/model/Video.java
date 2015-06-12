@@ -68,11 +68,12 @@ public class Video extends SugarRecord<Video> implements Serializable {
 //    private SuperFile file;
 
     public String getName() {
-        return name;
+        return name.replaceAll("''", "'");
     }
 
     public void setName(String name) {
-        this.name = name;
+        name = name.replaceAll("''", "'");
+        this.name = name.replaceAll("'", "''");
     }
 
     public String getCardImageUrl() {
@@ -277,7 +278,7 @@ public class Video extends SugarRecord<Video> implements Serializable {
     //Creates a new version of this video so it can be passed around indirectly for threading
     public Video clone() {
         Video clone = new Video();
-        clone.setName(getName());
+        clone.setName(name);
         clone.setVideoUrl(Arrays.asList(getVideoUrls()));
         clone.setIsMovie(isMovie());
         clone.setCreated(getCreated());
@@ -317,12 +318,16 @@ public class Video extends SugarRecord<Video> implements Serializable {
 //            Date prod = new Date(Date.parse(tvShow.getEpisode().getAirDate()));
 //            Log.d("amp:Video", Date.parse(tvShow.getEpisode().getAirDate())+" to "+prod.getYear());
 //            return prod.getYear();
-            return Integer.parseInt(tvShow.getEpisode().getAirDate().substring(0,4));
+            if(tvShow.getEpisode() != null)
+                return Integer.parseInt(tvShow.getEpisode().getAirDate().substring(0,4));
         } else if(movie != null) {
 //            Date prod = new Date(Date.parse(movie.getReleaseDate()));
 //            Log.d("amp:Video", Date.parse(movie.getReleaseDate())+" to "+prod.getYear());
 //            return prod.getYear();
-            return Integer.parseInt(movie.getReleaseDate().substring(0,4));
+            if(movie.getReleaseDate().length() > 4)
+                return Integer.parseInt(movie.getReleaseDate().substring(0,4));
+            else
+                Log.e("amp:Video", "Got weird release date "+movie.getReleaseDate());
         }
         return 2015;
     }

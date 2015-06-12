@@ -67,13 +67,16 @@ public final class DownloadTaskHelper {
         NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication("", user, password);
 
         List<SmbFile> files = Collections.emptyList();
-        /*try {
-//            files = VideoUtils.getFilesFromDir(path, auth);
-        } catch (Exception e) {
-            Log.d(TAG, e.getMessage()+"");
-            e.printStackTrace();
-            return new ArrayList<>();
-        }*/
+        //Manually delete all entries. Is this the best way to do it? No.
+        List<Video> videos = Select
+                .from(Video.class)
+                .where(Condition.prop("video_url").like("%" + path + "%"))
+                .list();
+        Log.d(TAG, "Purging "+videos.size()+" videos from source");
+        for(Video vx: videos) {
+            vx.delete();
+        }
+
         //Let's do this in a way that's not going to blow out the memory of the device
         Log.d(TAG, "getting files from dir "+path+" with auth "+auth.getDomain()+" "+auth.getName()+" "+auth.getUsername()+" "+auth.getPassword());
         SmbFile baseDir = null;
@@ -88,33 +91,6 @@ public final class DownloadTaskHelper {
             e.printStackTrace();
             Log.e(TAG, "SmbException: "+e.getMessage());
         }
-
-
-        /*while (!queue.isEmpty()) {
-            SmbFile file = queue.removeFirst();
-            seen.add(file);
-            Log.d(TAG, file.getName()+", "+file.getPath());
-
-            if (file.isDirectory()) {
-                Log.d(TAG, "Found directory " +file.getName()+", "+file.getPath());
-                Set<SmbFile> smbFiles = new LinkedHashSet<SmbFile>();
-                try {
-                    Collections.addAll(smbFiles, file.listFiles());
-                    Log.d(TAG, "Got past "+file.getName());
-                    //TODO Let's create a dialog to show all this stuff
-                } catch(Exception e) {
-                    Log.d(TAG, "List files failed "+e.getMessage());
-                }
-
-                for (SmbFile child : smbFiles) {
-                    if (!seen.contains(child)) {
-                        queue.add(child);
-                    }
-                }
-            } else if (VideoUtils.isVideoFile(file.getName())) {
-                results.add(file);
-            }
-        }*/
 
         return files;
     }
@@ -161,21 +137,29 @@ public final class DownloadTaskHelper {
                             && !f.getName().contains("Samsung Install Files")
                             && !f.getName().contains("AE Renders")
                             && !f.getName().contains("LocalData")
+                            && !f.getName().contains("$RECYCLE")
+                            && !f.getName().contains("Encore DVD")
+                            && !f.getName().contains("16 GB Photo card")
+                            && !f.getName().contains("Ignore")
                             && !f.getName().contains("Documents") //TEMP
-                            /*&& !f.getName().contains("Thrive Music Video") //TEMP*/
+                            && !f.getName().contains("Downloads") //TEMP
+                            && !f.getName().contains("TypeGEMs") //TEMP
+                            && !f.getName().contains("KofC7032Web") //TEMP
+                            && !f.getName().contains("hype mobile docs") //TEMP
+                            && !f.getName().contains("Thrive Music Video") //TEMP
                             /*&& f.getPath().contains("Entertainment") //TEMP*/
                             && !f.getName().contains("Preview Files")) {
                         Log.d(TAG, "Check "+f.getPath());
                         traverseSmbFiles(f, auth);
                     } else {
-                        Log.d(TAG, "Don't check " + f.getPath());
+//                        Log.d(TAG, "Don't check " + f.getPath());
                     }
                 } catch(Exception e) {
                     //This folder isn't accessible
                     Log.d(TAG, "Inaccessible: "+f.getName()+" "+e.getMessage());
                     //This will save us time in the traversal
                 }
-            } else /*if(f.getPath().contains("Holly"))*/{ //TEMP
+            } else/* if(f.getPath().contains("Films"))*/{ //TEMP
                 //Is this something we want to add?
 //                Log.d(TAG, "Non-directory "+f.getPath());
                 if(VideoUtils.isVideoFile(f.getPath())) {
@@ -229,7 +213,7 @@ public final class DownloadTaskHelper {
                         //Let's delete this video and all like it from our video database
                         List<Video> videos = Select
                                 .from(Video.class)
-                                .where(Condition.prop("video_url").like("%" + f.getPath().replace("'", "\'") + "%"))
+                                .where(Condition.prop("video_url").like("%" + f.getPath().replace("'", "''") + "%"))
                                 .list();
 //                        Log.d(TAG, "Purging "+videos.size()+" item(s)");
                         for(Video vx: videos) {
@@ -479,7 +463,8 @@ public final class DownloadTaskHelper {
                                         video.setName(movie.getTitle());
                                         video.setIsMatched(true);
                                         video.setMovie(movie);
-                                        video.setDuration(movie.getRuntime());
+                                        if(movie != null)
+                                            video.setDuration(movie.getRuntime());
                                     }
 
                                     String cardImageUrl = config.getImages().getBase_url() + "original" +

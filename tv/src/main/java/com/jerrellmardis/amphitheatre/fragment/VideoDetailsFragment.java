@@ -34,6 +34,7 @@ import com.jerrellmardis.amphitheatre.activity.DetailsActivity;
 import com.jerrellmardis.amphitheatre.listeners.RowBuilderTaskListener;
 import com.jerrellmardis.amphitheatre.model.Source;
 import com.jerrellmardis.amphitheatre.model.Video;
+import com.jerrellmardis.amphitheatre.model.VideoDatabase;
 import com.jerrellmardis.amphitheatre.model.VideoGroup;
 import com.jerrellmardis.amphitheatre.provider.VideosProvider;
 import com.jerrellmardis.amphitheatre.task.DetailRowBuilderTask;
@@ -92,22 +93,9 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
             e.printStackTrace();
         }*/
         if (isVideo) {
-            mVideo = (Video) getActivity().getIntent().getSerializableExtra(Constants.VIDEO);
+            if(getActivity().getIntent().getSerializableExtra(Constants.VIDEO) != null)
+                mVideo = (Video) getActivity().getIntent().getSerializableExtra(Constants.VIDEO);
 
-            /*if(mVideo == null) {
-                //Get via id
-                int id = getActivity().getIntent().getIntExtra(SearchManager.SUGGEST_COLUMN_INTENT_DATA_ID, -1);
-                Log.d(TAG, id+"");
-                mVideo = Select.from(Video.class).where(Condition.prop("id").eq(id)).list().get(0);
-            }*/
-
-            /*if(mVideo.isMovie())
-            if (mVideo.getTvShow() != null && mVideo.getTvShow().getEpisode() != null) {
-
-            } else {
-
-            }
-*/
             Map<String, List<Video>> relatedVideos = Collections.emptyMap();
 
             if (mVideo.isMovie()) {
@@ -140,8 +128,15 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
         String globalSearch = getString(R.string.global_search);
         if (globalSearch.equalsIgnoreCase(intentAction)) {
             Uri intentData = intent.getData();
+            VideoDatabase vdb = new VideoDatabase(getActivity());
+            try {
+                Log.d(TAG, Arrays.asList(getActivity().getIntent().getExtras().keySet().toArray()).toString());
+                Log.d(TAG, getActivity().getIntent().getStringExtra("intent_extra_data_key"));
+            } catch(Exception e) {
+
+            }
             Log.d(TAG, "action: " + intentAction + " intentData:" + intentData);
-            int selectedIndex = Integer.parseInt(intentData.getLastPathSegment());
+//            int selectedIndex = Integer.parseInt(intentData.getLastPathSegment());
 //            String selectedIndex = intentData.getLastPathSegment();
             List<Video> movies = Source.listAll(Video.class);
             int movieIndex = 0;
@@ -149,10 +144,11 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
                 return false;
             }
             for (Video movie : movies) {
-                Log.d(TAG, selectedIndex+" => "+movieIndex+" "+movie.getName());
+//                Log.d(TAG, selectedIndex+" => "+movieIndex+" "+movie.getName()+" "+movie.getId());
+//                Log.d(TAG, intentData.toString()+" => "+movie.getName()+" "+movie.getVideoUrl());
                 movieIndex++;
 //                if (selectedIndex.equals(movie.getVideoUrl())) {
-                if (selectedIndex == movieIndex) {
+                if (intentData.toString().contains(movie.getVideoUrl())) {
                     mVideo = movie;
                     Log.d(TAG, movie.toString());
                     return true;

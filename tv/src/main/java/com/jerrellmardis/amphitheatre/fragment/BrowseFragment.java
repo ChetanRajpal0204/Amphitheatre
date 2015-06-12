@@ -64,6 +64,7 @@ import com.jerrellmardis.amphitheatre.R;
 import com.jerrellmardis.amphitheatre.activity.DetailsActivity;
 import com.jerrellmardis.amphitheatre.activity.GridViewActivity;
 import com.jerrellmardis.amphitheatre.activity.SearchActivity;
+import com.jerrellmardis.amphitheatre.model.FileSource;
 import com.jerrellmardis.amphitheatre.model.GridGenre;
 import com.jerrellmardis.amphitheatre.model.Source;
 import com.jerrellmardis.amphitheatre.model.SuperFile;
@@ -122,6 +123,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
     private ArrayObjectAdapter mAdapter;
     private CardPresenter mCardPresenter;
     private TvShowsCardPresenter mTvShowsCardPresenter;
+    private boolean isRefreshing = false;
     private static String TAG ="amp:BrowseFragment";
 
     private BroadcastReceiver videoUpdateReceiver = new BroadcastReceiver() {
@@ -164,7 +166,13 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         prepareBackgroundManager();
         setupUIElements();
         setupEventListeners();
-        refreshLocalLibrary();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                refreshLocalLibrary();
+            }
+        }).start();
+
         /*new Thread(new Runnable() {
             @Override
             public void run() {
@@ -272,16 +280,26 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
     }
 
     private void loadVideos() {
+        if(isRefreshing) {
+            Log.d(TAG, "Can't perform another refresh right now!");
+            return;
+        }
+        isRefreshing = true;
         List<Video> videos = Source.listAll(Video.class);
         if (videos != null && !videos.isEmpty()) {
+            Log.d(TAG, "Adding videos to ui");
             for (Video video : videos) {
 //                Log.d(TAG, "Loading "+video.getName()+" from "+video.getVideoUrl());
-                addVideoToUi(video);
+                if(video.isMatched() || video.getSource() != FileSource.SMB)
+                    addVideoToUi(video);
             }
+            Log.d(TAG, "That's over");
             rebuildSubCategories();
             //Put categories first to get a nice triage, then go into gritty file system
-
+            Log.d(TAG, "Rebuilding subcategories");
             reloadAdapters();
+            Log.d(TAG, "Reloading adapters");
+            isRefreshing = false;
         } else {
             Log.d(TAG, "Videos are null or empty");
         }
@@ -869,7 +887,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 retCol,
                 null, null, null
         );
-        Log.d(TAG, "Returns "+cur.getCount()+" result(s)");
+        Log.d(TAG, "Returns " + cur.getCount() + " result(s)");
         //Temporarily delete ALL videos, then change for local only
         /*List<Video> videos = Select
                 .from(Video.class)
@@ -880,22 +898,25 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         }*/
         pushLocalVideos(cur);
         //Do same for any USB drives
-        UsbManager manager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
-        HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
-        Iterator<UsbDevice> deviceIterator = deviceList.values().iterator();
-        while(deviceIterator.hasNext()){
-            UsbDevice device = deviceIterator.next();
-            Log.d(TAG, "Found "+device.getDeviceName()+" "+device.getProductName()+" "+device.getManufacturerName());            //your code
-            Log.d(TAG, "Is "+device.getDeviceClass()+", "+ device.getDeviceSubclass()+" "+ UsbConstants.USB_CLASS_MASS_STORAGE);
-            if(device.getDeviceClass() == 0 || device.getDeviceClass() == 8) {
-                PendingIntent mPermissionIntent = PendingIntent.getBroadcast(getActivity(), 0, new Intent(ACTION_USB_PERMISSION), 0);
-                IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-                getActivity().registerReceiver(mUsbReceiver, filter);
-                manager.requestPermission(device, mPermissionIntent);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                UsbManager manager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
+                HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
+                Iterator<UsbDevice> deviceIterator = deviceList.values().iterator();
+                while(deviceIterator.hasNext()){
+                    UsbDevice device = deviceIterator.next();
+                    Log.d(TAG, "Found "+device.getDeviceName()+" "+device.getProductName()+" "+device.getManufacturerName());            //your code
+                    Log.d(TAG, "Is "+device.getDeviceClass()+", "+ device.getDeviceSubclass()+" "+ UsbConstants.USB_CLASS_MASS_STORAGE);
+                    if(device.getDeviceClass() == 0 || device.getDeviceClass() == 8) {
+                        PendingIntent mPermissionIntent = PendingIntent.getBroadcast(getActivity(), 0, new Intent(ACTION_USB_PERMISSION), 0);
+                        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+                        getActivity().registerReceiver(mUsbReceiver, filter);
+                        manager.requestPermission(device, mPermissionIntent);
+                    }
+                }
             }
-        }
-
-//        onActivityCreated(null);
+        }).start();
     }
 
     /**
@@ -964,6 +985,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 DownloadTaskHelper.updateSingleVideo(localFile, new DownloadTaskHelper.DownloadTaskListener() {
                     @Override
                     public void onDownloadFinished() {
+                        Log.d(TAG, "Send refresh from pushLocalVideos");
                         refreshHandler.sendEmptyMessage(0);
                     }
                 });
@@ -1034,6 +1056,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
+                            Log.d(TAG, "USB done checking");
                             File file=new File("/");
                             File[] listFiles = file.listFiles();
                             for ( File f : listFiles){
@@ -1118,6 +1141,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 DownloadTaskHelper.updateSingleVideo(usbVideo, new DownloadTaskHelper.DownloadTaskListener() {
                     @Override
                     public void onDownloadFinished() {
+                        Log.d(TAG, "Send refresh from USB");
                         refreshHandler.sendEmptyMessage(0);
                     }
                 });
@@ -1126,7 +1150,8 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 Log.d(TAG,"Ignore "+file.getName());
             }
         }
-        refreshHandler.sendEmptyMessage(0);
+        /*Log.d(TAG, "Finished looking through USB videos, refresh");
+        refreshHandler.sendEmptyMessage(0);*/
     }
 
     /*public void cacheFile(UsbFile entry) throws IOException {
@@ -1149,6 +1174,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         @Override
         public void handleMessage(Message msg) {
 //            super.handleMessage(msg);
+            Log.d(TAG, "I have been asked to refresh");
             refresh();
         }
     };
