@@ -6,9 +6,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.support.v17.leanback.app.BackgroundManager;
 import android.support.v17.leanback.widget.ArrayObjectAdapter;
-import android.support.v17.leanback.widget.OnItemClickedListener;
-import android.support.v17.leanback.widget.OnItemSelectedListener;
+import android.support.v17.leanback.widget.OnItemViewClickedListener;
+import android.support.v17.leanback.widget.OnItemViewSelectedListener;
+import android.support.v17.leanback.widget.Presenter;
 import android.support.v17.leanback.widget.Row;
+import android.support.v17.leanback.widget.RowPresenter;
 import android.support.v17.leanback.widget.VerticalGridPresenter;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -105,9 +107,9 @@ public class VerticalGridFragment extends android.support.v17.leanback.app.Verti
 
         setAdapter(adapter);
 
-        setOnItemClickedListener(new OnItemClickedListener() {
+        setOnItemViewClickedListener(new OnItemViewClickedListener() {
             @Override
-            public void onItemClicked(Object item, Row row) {
+            public void onItemClicked(Presenter.ViewHolder viewHolder, Object item, RowPresenter.ViewHolder viewHolder1, Row row) {
                 if (item instanceof VideoGroup) {
                     Intent intent = new Intent(getActivity(), DetailsActivity.class);
                     intent.putExtra(Constants.IS_VIDEO, false);
@@ -122,9 +124,9 @@ public class VerticalGridFragment extends android.support.v17.leanback.app.Verti
             }
         });
 
-        setOnItemSelectedListener(new OnItemSelectedListener() {
+        setOnItemViewSelectedListener(new OnItemViewSelectedListener() {
             @Override
-            public void onItemSelected(Object item, Row row) {
+            public void onItemSelected(Presenter.ViewHolder viewHolder, Object item, RowPresenter.ViewHolder viewHolder1, Row row) {
                 if (item instanceof Video) {
                     try {
                         mBackgroundImageUrl = ((Video) item).getBackgroundImageUrl();

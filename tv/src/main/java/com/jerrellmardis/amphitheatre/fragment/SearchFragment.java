@@ -25,8 +25,10 @@ import android.support.v17.leanback.widget.HeaderItem;
 import android.support.v17.leanback.widget.ListRow;
 import android.support.v17.leanback.widget.ListRowPresenter;
 import android.support.v17.leanback.widget.ObjectAdapter;
-import android.support.v17.leanback.widget.OnItemClickedListener;
+import android.support.v17.leanback.widget.OnItemViewClickedListener;
+import android.support.v17.leanback.widget.Presenter;
 import android.support.v17.leanback.widget.Row;
+import android.support.v17.leanback.widget.RowPresenter;
 import android.text.TextUtils;
 
 import com.jerrellmardis.amphitheatre.R;
@@ -62,7 +64,7 @@ public class SearchFragment extends android.support.v17.leanback.app.SearchFragm
         mListRowAdapter = new ArrayObjectAdapter(new CardPresenter(getActivity()));
         mRowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
         setSearchResultProvider(this);
-        setOnItemClickedListener(getDefaultItemClickedListener());
+        setOnItemViewClickedListener(getDefaultItemClickedListener());
         mDelayedLoad = new SearchRunnable();
     }
 
@@ -93,10 +95,10 @@ public class SearchFragment extends android.support.v17.leanback.app.SearchFragm
         return true;
     }
 
-    private OnItemClickedListener getDefaultItemClickedListener() {
-        return new OnItemClickedListener() {
+    private OnItemViewClickedListener getDefaultItemClickedListener() {
+        return new OnItemViewClickedListener() {
             @Override
-            public void onItemClicked(Object item, Row row) {
+            public void onItemClicked(Presenter.ViewHolder viewHolder, Object item, RowPresenter.ViewHolder viewHolder1, Row row) {
                 if (item instanceof Video) {
                     Video video = (Video) item;
 
@@ -145,7 +147,7 @@ public class SearchFragment extends android.support.v17.leanback.app.SearchFragm
 
             mListRowAdapter.addAll(0, searchMap.values());
 
-            HeaderItem header = new HeaderItem(0, getResources().getString(R.string.search_results), null);
+            HeaderItem header = new HeaderItem(0, getResources().getString(R.string.search_results));
             mRowsAdapter.add(new ListRow(header, mListRowAdapter));
         }
     }

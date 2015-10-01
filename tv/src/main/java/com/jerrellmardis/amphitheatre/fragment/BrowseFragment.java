@@ -46,9 +46,11 @@ import android.support.v17.leanback.widget.HeaderItem;
 import android.support.v17.leanback.widget.ListRow;
 import android.support.v17.leanback.widget.ListRowPresenter;
 import android.support.v17.leanback.widget.ObjectAdapter;
-import android.support.v17.leanback.widget.OnItemClickedListener;
-import android.support.v17.leanback.widget.OnItemSelectedListener;
+import android.support.v17.leanback.widget.OnItemViewClickedListener;
+import android.support.v17.leanback.widget.OnItemViewSelectedListener;
+import android.support.v17.leanback.widget.Presenter;
 import android.support.v17.leanback.widget.Row;
+import android.support.v17.leanback.widget.RowPresenter;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -334,8 +336,8 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
     }
 
     private void setupEventListeners() {
-        setOnItemSelectedListener(getDefaultItemSelectedListener());
-        setOnItemClickedListener(getDefaultItemClickedListener());
+        setOnItemViewSelectedListener(getDefaultItemSelectedListener());
+        setOnItemViewClickedListener(getDefaultItemClickedListener());
         setOnSearchClickedListener(getSearchClickedListener());
         setBrowseTransitionListener(getBrowseTransitionListener());
     }
@@ -388,7 +390,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                         videoNameComparator, mCardPresenter);
                 listRowAdapter.add(video);
 
-                HeaderItem header = new HeaderItem(0, getString(R.string.unmatched), null);
+                HeaderItem header = new HeaderItem(0, getString(R.string.unmatched));
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
 //                Log.d(TAG, "Adding "+video.getVideoUrl()+" at index "+index+" to Unmatched");
                 mAdapter.add(index, new ListRow(header, listRowAdapter));
@@ -408,7 +410,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                             videoNameComparator, mCardPresenter);
                     listRowAdapter.add(video);
 
-                    HeaderItem header = new HeaderItem(0, "All USB Videos", null);
+                    HeaderItem header = new HeaderItem(0, "All USB Videos");
                     int index = mAdapter.size() > 1 ? 1 : 0;
                     mAdapter.add(index, new ListRow(header, listRowAdapter));
                 }
@@ -427,7 +429,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                             videoNameComparator, mCardPresenter);
                     listRowAdapter.add(video);
 
-                    HeaderItem header = new HeaderItem(0, "All Local Videos", null);
+                    HeaderItem header = new HeaderItem(0, "All Local Videos");
                     int index = mAdapter.size() > 1 ? 1 : 0;
                     mAdapter.add(index, new ListRow(header, listRowAdapter));
                 }
@@ -453,7 +455,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                                 videoNameComparator, mCardPresenter);
                         listRowAdapter.add(video);
 
-                        HeaderItem header = new HeaderItem(0, category, null);
+                        HeaderItem header = new HeaderItem(0, category);
                         int index = mAdapter.size() > 1 ? 1 : 0;
                         mAdapter.add(index, new ListRow(header, listRowAdapter));
                     }
@@ -474,7 +476,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                             videoNameComparator, mCardPresenter);
                     listRowAdapter.add(video);
 
-                    HeaderItem header = new HeaderItem(0, "All USB Videos", null);
+                    HeaderItem header = new HeaderItem(0, "All USB Videos");
                     int index = mAdapter.size() > 1 ? 1 : 0;
                     mAdapter.add(index, new ListRow(header, listRowAdapter));
                 }
@@ -493,7 +495,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                             videoNameComparator, mCardPresenter);
                     listRowAdapter.add(video);
 
-                    HeaderItem header = new HeaderItem(0, "All Local Videos", null);
+                    HeaderItem header = new HeaderItem(0, "All Local Videos");
                     int index = mAdapter.size() > 1 ? 1 : 0;
                     mAdapter.add(index, new ListRow(header, listRowAdapter));
                 }
@@ -530,7 +532,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                         videoGroupNameComparator, mTvShowsCardPresenter);
                 listRowAdapter.add(new VideoGroup(video));
 
-                HeaderItem header = new HeaderItem(0, getString(R.string.all_tv_shows), null);
+                HeaderItem header = new HeaderItem(0, getString(R.string.all_tv_shows));
 //                int index = mAdapter.size() > 1 ? 0 : 0;
                 mAdapter.add(0, new ListRow(header, listRowAdapter));
             }
@@ -585,7 +587,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 ArrayObjectAdapter listRowAdapter = new ArrayObjectAdapter(mTvShowsCardPresenter);
                 listRowAdapter.addAll(0, tvShows);
 
-                HeaderItem header = new HeaderItem(0, getString(R.string.recently_added_tv_episodes), null);
+                HeaderItem header = new HeaderItem(0, getString(R.string.recently_added_tv_episodes));
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
                 if (unMatchedRow != null) index -= 1;
                 mAdapter.add(0, new ListRow(header, listRowAdapter));
@@ -603,7 +605,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
                 ArrayObjectAdapter listRowAdapter = new ArrayObjectAdapter(mCardPresenter);
                 listRowAdapter.addAll(0, movies);
 
-                HeaderItem header = new HeaderItem(0, getString(R.string.recently_added_movies), null);
+                HeaderItem header = new HeaderItem(0, getString(R.string.recently_added_movies));
                 int index = mAdapter.size() > 1 ? mAdapter.size() - 1 : 0;
                 if (unMatchedRow != null) index -= 1;
                 mAdapter.add(0, new ListRow(header, listRowAdapter));
@@ -642,7 +644,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         }
 
         if (!movieGenres.isEmpty()) {
-            HeaderItem gridHeader = new HeaderItem(0, getString(R.string.movies_genre), null);
+            HeaderItem gridHeader = new HeaderItem(0, getString(R.string.movies_genre));
             ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(new GridItemPresenter(getActivity()));
             for (String genre : movieGenres) {
                 gridRowAdapter.add(new GridGenre(genre, Source.Type.MOVIE));
@@ -653,7 +655,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         }
 
         if (!tvShowGenres.isEmpty()) {
-            HeaderItem gridHeader = new HeaderItem(0, getString(R.string.tvshows_genre), null);
+            HeaderItem gridHeader = new HeaderItem(0, getString(R.string.tvshows_genre));
             ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(new GridItemPresenter(getActivity()));
             for (String genre : tvShowGenres) {
                 gridRowAdapter.add(new GridGenre(genre, Source.Type.TV_SHOW));
@@ -672,7 +674,7 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
     }
 
     private void addSettingsHeader() {
-        HeaderItem gridHeader = new HeaderItem(0, getString(R.string.settings), null);
+        HeaderItem gridHeader = new HeaderItem(0, getString(R.string.settings));
         ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(new GridItemPresenter(getActivity()));
         gridRowAdapter.add(getString(R.string.add_source));
         gridRowAdapter.add("Refresh");
@@ -740,10 +742,10 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
         };
     }
 
-    private OnItemSelectedListener getDefaultItemSelectedListener() {
-        return new OnItemSelectedListener() {
+    private OnItemViewSelectedListener getDefaultItemSelectedListener() {
+        return new OnItemViewSelectedListener() {
             @Override
-            public void onItemSelected(Object item, Row row) {
+            public void onItemSelected(Presenter.ViewHolder viewHolder, Object item, RowPresenter.ViewHolder viewHolder1, Row row) {
                 if (item instanceof Video) {
                     try {
                         mBackgroundImageUrl = ((Video) item).getBackgroundImageUrl();
@@ -779,10 +781,10 @@ public class BrowseFragment extends android.support.v17.leanback.app.BrowseFragm
     /**
      * Card Click Listener
      */
-    private OnItemClickedListener getDefaultItemClickedListener() {
-        return new OnItemClickedListener() {
+    private OnItemViewClickedListener getDefaultItemClickedListener() {
+        return new OnItemViewClickedListener() {
             @Override
-            public void onItemClicked(Object item, Row row) {
+            public void onItemClicked(Presenter.ViewHolder viewHolder, Object item, RowPresenter.ViewHolder viewHolder1, Row row) {
                 if (item instanceof Video || item instanceof VideoGroup) {
                     if (item instanceof VideoGroup) {
                         Log.d(TAG, "Item is instance of VideoGroup");

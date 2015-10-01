@@ -175,7 +175,7 @@ public class DetailRowBuilderTask extends AsyncTask<Video, Integer, DetailsOverv
                     List<Video> subList = entry.getValue().subList(0, end);
 
                     listRowAdapter.addAll(0, subList);
-                    HeaderItem header = new HeaderItem(0, entry.getKey(), null);
+                    HeaderItem header = new HeaderItem(0, entry.getKey());
                     adapter.add(new ListRow(header, listRowAdapter));
                 }
             }

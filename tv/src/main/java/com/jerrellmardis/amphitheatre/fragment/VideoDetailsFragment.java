@@ -23,8 +23,10 @@ import android.os.Bundle;
 import android.support.v17.leanback.app.BackgroundManager;
 import android.support.v17.leanback.app.DetailsFragment;
 import android.support.v17.leanback.widget.ArrayObjectAdapter;
-import android.support.v17.leanback.widget.OnItemClickedListener;
+import android.support.v17.leanback.widget.OnItemViewClickedListener;
+import android.support.v17.leanback.widget.Presenter;
 import android.support.v17.leanback.widget.Row;
+import android.support.v17.leanback.widget.RowPresenter;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -116,7 +118,7 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
             new DetailRowBuilderTask(getActivity(), getRelatedTvShows(mVideo), false, this).execute(mVideo);
         }
 
-        setOnItemClickedListener(getDefaultItemClickedListener());
+        setOnItemViewClickedListener(getDefaultItemClickedListener());
     }
 
     /*
@@ -158,10 +160,10 @@ public class VideoDetailsFragment extends DetailsFragment implements RowBuilderT
         return false;
     }
 
-    protected OnItemClickedListener getDefaultItemClickedListener() {
-        return new OnItemClickedListener() {
+    protected OnItemViewClickedListener getDefaultItemClickedListener() {
+        return new OnItemViewClickedListener() {
             @Override
-            public void onItemClicked(Object item, Row row) {
+            public void onItemClicked(Presenter.ViewHolder viewHolder, Object item, RowPresenter.ViewHolder viewHolder1, Row row) {
                 if (item instanceof Video) {
                     Intent intent = new Intent(getActivity(), DetailsActivity.class);
                     intent.putExtra(Constants.IS_VIDEO, true);
